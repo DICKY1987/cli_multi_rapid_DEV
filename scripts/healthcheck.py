@@ -1,33 +1,30 @@
 from __future__ import annotations
-import time
+
 import json
-import sys
-from urllib.request import urlopen
+from typing import Any, Dict
+
+from integrations.process import ProcessRunner
+from integrations.registry_tools import detect_all
 
 
-def check(url: str, timeout_s: int = 30) -> int:
-    deadline = time.time() + timeout_s
-    last_err = None
-    while time.time() < deadline:
-        try:
-            with urlopen(url, timeout=3) as resp:
-                if resp.status == 200:
-                    body = resp.read().decode("utf-8", errors="ignore")
-                    try:
-                        data = json.loads(body)
-                        if data.get("ok"):
-                            print("health: ok")
-                            return 0
-                    except Exception:
-                        pass
-        except Exception as e:
-            last_err = e
-        time.sleep(1.0)
-    print(f"health: failed after {timeout_s}s: {last_err}")
-    return 1
+def main() -> int:
+    runner = ProcessRunner(dry_run=False)
+    probes = detect_all(runner)
+    ok = True
+    report: Dict[str, Any] = {}
+    for name, probe in probes.items():
+        report[name] = {
+            "ok": probe.ok,
+            "version": probe.version,
+            "path": probe.path,
+            "details": probe.details,
+        }
+        if not probe.ok:
+            ok = False
+    print(json.dumps(report, indent=2))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    url = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:5055/health"
-    raise SystemExit(check(url))
+    raise SystemExit(main())
 

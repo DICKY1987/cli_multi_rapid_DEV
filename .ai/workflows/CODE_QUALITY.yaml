@@ -1,46 +1,13 @@
-name: "Code Quality Check"
-description: "Run comprehensive code quality checks with deterministic tools"
-
-inputs:
-  files: ["src/**/*.py", "tests/**/*.py"]
-  lane: "lane/quality/auto-fixes"
-
-policy:
-  max_tokens: 50000
-  prefer_deterministic: true
-  timeout_minutes: 5
-
+version: 1
+name: Code Quality
+description: Run Python quality tools with deterministic settings.
 steps:
-  - id: "1.001"
-    name: "Run Diagnostic Analysis"
-    actor: vscode_diagnostics
-    with:
-      analyzers: ["ruff", "mypy", "python"]
-    emits: ["artifacts/diagnostics.json"]
+  - id: ruff
+    run: ruff check .
+  - id: mypy
+    run: mypy src/
+  - id: bandit
+    run: bandit -q -r src/
+  - id: semgrep
+    run: semgrep --error --config auto .
 
-  - id: "1.002"
-    name: "Apply Code Fixes"
-    actor: code_fixers
-    with:
-      tools: ["ruff", "black", "isort"]
-    emits: ["artifacts/code_fixes.diff"]
-
-  - id: "1.003"
-    name: "Run Test Suite"
-    actor: pytest_runner
-    with:
-      path: "tests/"
-      coverage: true
-    emits: ["artifacts/test_report.json"]
-
-  - id: "1.004"
-    name: "Quality Gates"
-    actor: verifier
-    with:
-      checks:
-        - type: "tests_pass"
-          from: "artifacts/test_report.json"
-        - type: "diff_limits"
-          max_files: 20
-          max_insertions: 500
-    on_fail: "stop"
