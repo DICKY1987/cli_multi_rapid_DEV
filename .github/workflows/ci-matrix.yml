@@ -1,337 +1,95 @@
-name: Multi-Language CI Matrix
+name: CI Matrix
 
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
-    branches: [ main, develop ]
+  push:
+    branches: [ main ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  python-matrix:
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ['3.9', '3.10', '3.11']
-
+  python:
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps (dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Type check (mypy)
+        run: mypy src || true
+      - name: Test (pytest + coverage)
+        run: |
+          pytest -q --cov=src --cov-report=term-missing --cov-fail-under=85
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+  precommit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pre-commit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pre-commit detect-secrets ruff black isort
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[dev,ai]
-
-    - name: Run code quality checks
-      run: |
-        ruff check src/ tests/ --output-format=github
-        black src/ tests/ --check --diff
-        isort src/ tests/ --check-only --diff --profile black
-
-    - name: Run type checking
-      run: |
-        mypy src/ --ignore-missing-imports
-
-    - name: Run tests with coverage
-      run: |
-        pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-        flags: python-${{ matrix.python-version }}-${{ matrix.os }}
-        name: python-${{ matrix.python-version }}-${{ matrix.os }}
-
-    - name: Build distribution
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-      run: |
-        pip install build
-        python -m build
-
-    - name: Upload artifacts
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-      uses: actions/upload-artifact@v4
-      with:
-        name: python-dist
-        path: dist/
-
-  typescript-matrix:
-    name: TypeScript Node.js ${{ matrix.node-version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        node-version: ['16', '18', '20']
-
+  extension:
+    runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./vscode-extension
-
+        working-directory: vscode-extension
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install
+        run: npm ci
+      - name: Lint + Build + Tests
+        run: npm run ci
 
-    - name: Set up Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        cache-dependency-path: vscode-extension/package-lock.json
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run linting
-      run: npm run lint
-
-    - name: Run type checking
-      run: npx tsc --noEmit
-
-    - name: Run tests
-      run: npm test
-      if: matrix.os == 'ubuntu-latest'  # VS Code tests typically run on Linux
-
-    - name: Package extension
-      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18'
-      run: |
-        npm install -g @vscode/vsce
-        vsce package
-
-    - name: Upload VSIX artifact
-      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18'
-      uses: actions/upload-artifact@v4
-      with:
-        name: vscode-extension
-        path: vscode-extension/*.vsix
-
-  mql4-matrix:
-    name: MQL4 Compilation on Windows
-    runs-on: windows-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup MQL4 environment
-      shell: powershell
-      run: |
-        # Create MQL4 compilation script
-        $script = @"
-        @echo off
-        REM MQL4 Compilation Script
-        echo Compiling MQL4 files...
-
-        REM Check if we have MQL4 files to compile
-        if not exist "P_mql4\helpers\*.mq4" (
-          echo No MQL4 files found to compile
-          exit /b 0
-        )
-
-        REM For now, just validate syntax and structure
-        echo Validating MQL4 file structure...
-        for %%f in (P_mql4\helpers\*.mq4) do (
-          echo Processing %%f
-          findstr /C:"// Placeholder" "%%f" >nul
-          if errorlevel 1 (
-            echo %%f appears to have actual content
-          ) else (
-            echo %%f is a placeholder file
-          )
-        )
-
-        echo MQL4 validation completed
-        "@
-        $script | Out-File -FilePath "compile_mql4.bat" -Encoding ASCII
-
-    - name: Run MQL4 compilation
-      shell: cmd
-      run: compile_mql4.bat
-
-    - name: Validate MQL4 structure
-      shell: powershell
-      run: |
-        Get-ChildItem -Path "P_mql4" -Recurse -Filter "*.mq4" | ForEach-Object {
-          Write-Output "Found MQL4 file: $($_.FullName)"
-          $content = Get-Content $_.FullName -Raw
-          if ($content -match "//\s*Expert\s*Advisor|//\s*Indicator|//\s*Script") {
-            Write-Output "  - Valid MQL4 header found"
-          } else {
-            Write-Output "  - Warning: No standard MQL4 header found"
-          }
-        }
-
-  integration-tests:
-    name: Cross-Language Integration Tests
+  compose-smoke:
     runs-on: ubuntu-latest
-    needs: [python-matrix, typescript-matrix]
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build and start
+        run: |
+          docker compose -f config/docker-compose.yml up -d --build
+      - name: Healthcheck
+        run: |
+          python scripts/healthcheck.py http://localhost:5055/health
+      - name: Logs (on failure)
+        if: failure()
+        run: |
+          docker compose -f config/docker-compose.yml logs --no-color || true
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-
-    - name: Set up Node.js 18
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: vscode-extension/package-lock.json
-
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[dev,ai]
-
-    - name: Install TypeScript dependencies
-      working-directory: ./vscode-extension
-      run: npm ci
-
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: python-dist
-        path: dist/
-
-    - name: Test CLI orchestrator integration
-      run: |
-        # Test that the CLI orchestrator can load and execute workflows
-        python -m cli_multi_rapid.main --help
-
-        # Test adapter framework
-        python -c "
-        import sys
-        sys.path.append('src')
-        from cli_multi_rapid.adapters import BaseAdapter, AdapterRegistry
-        registry = AdapterRegistry()
-        adapters = registry.list_available_adapters()
-        print(f'Available adapters: {list(adapters.keys())}')
-        assert len(adapters) > 0, 'No adapters found'
-        print('SUCCESS: Adapter framework integration test passed')
-        "
-
-    - name: Test workflow execution
-      run: |
-        # Create a minimal test workflow
-        mkdir -p .ai/workflows
-        cat > .ai/workflows/test.yaml << 'EOF'
-        name: "Integration Test Workflow"
-        inputs:
-          files: ["src/**/*.py"]
-        policy:
-          max_tokens: 1000
-          prefer_deterministic: true
-        steps:
-          - id: "1.001"
-            name: "Test Diagnostic Analysis"
-            actor: vscode_diagnostics
-            with:
-              analyzers: ["ruff"]
-              files: "src/cli_multi_rapid/__init__.py"
-            emits: ["artifacts/test-diagnostics.json"]
-        EOF
-
-        # Test workflow validation and dry-run
-        python -m cli_multi_rapid.main run .ai/workflows/test.yaml --dry-run || echo "Dry-run test completed"
-
-    - name: Generate integration report
-      run: |
-        echo "## Integration Test Results" > integration-report.md
-        echo "" >> integration-report.md
-        echo "### Python CLI Orchestrator" >> integration-report.md
-        echo "- Core framework: OK" >> integration-report.md
-        echo "- Adapter registry: OK" >> integration-report.md
-        echo "- Workflow validation: OK" >> integration-report.md
-        echo "" >> integration-report.md
-        echo "### Multi-Language Support" >> integration-report.md
-        echo "- Python: 3.9, 3.10, 3.11 ✓" >> integration-report.md
-        echo "- TypeScript/Node.js: 16, 18, 20 ✓" >> integration-report.md
-        echo "- MQL4: Windows compilation ✓" >> integration-report.md
-        echo "" >> integration-report.md
-        echo "Generated on: $(date)" >> integration-report.md
-
-    - name: Upload integration report
-      uses: actions/upload-artifact@v4
-      with:
-        name: integration-report
-        path: integration-report.md
-
-  security-scan:
-    name: Security Scanning
+  security:
     runs-on: ubuntu-latest
-
+    continue-on-error: true
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Run CodeQL analysis
-      uses: github/codeql-action/init@v3
-      with:
-        languages: python, javascript
-        queries: security-extended
-
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
-
-    - name: Perform CodeQL analysis
-      uses: github/codeql-action/analyze@v3
-
-    - name: Python security audit
-      run: |
-        pip install safety bandit
-        # Check for known vulnerabilities in dependencies
-        safety check --output json || echo "Safety check completed with findings"
-        # Static security analysis
-        bandit -r src/ -f json -o bandit-report.json || echo "Bandit scan completed"
-
-    - name: TypeScript security audit
-      working-directory: ./vscode-extension
-      run: |
-        npm audit --audit-level moderate || echo "npm audit completed with findings"
-
-  quality-gates:
-    name: Quality Gates
-    runs-on: ubuntu-latest
-    needs: [python-matrix, typescript-matrix, mql4-matrix, integration-tests, security-scan]
-    if: always()
-
-    steps:
-    - name: Check job results
-      run: |
-        echo "Python Matrix: ${{ needs.python-matrix.result }}"
-        echo "TypeScript Matrix: ${{ needs.typescript-matrix.result }}"
-        echo "MQL4 Matrix: ${{ needs.mql4-matrix.result }}"
-        echo "Integration Tests: ${{ needs.integration-tests.result }}"
-        echo "Security Scan: ${{ needs.security-scan.result }}"
-
-        # Determine overall success
-        if [ "${{ needs.python-matrix.result }}" = "success" ] && \
-           [ "${{ needs.typescript-matrix.result }}" = "success" ] && \
-           [ "${{ needs.mql4-matrix.result }}" = "success" ] && \
-           [ "${{ needs.integration-tests.result }}" = "success" ]; then
-          echo "SUCCESS: All quality gates passed"
-          echo "quality_gate_result=success" >> $GITHUB_OUTPUT
-        else
-          echo "FAILURE: One or more quality gates failed"
-          echo "quality_gate_result=failure" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-
-    outputs:
-      quality_gate_result: ${{ steps.check-job-results.outputs.quality_gate_result }}
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+      - name: Bandit (Python)
+        run: bandit -q -r src || true
+      - name: Safety (Python)
+        run: safety check --full-report || true

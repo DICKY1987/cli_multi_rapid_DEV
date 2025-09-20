@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Refactor Plan Artifact",
+  "type": "object",
+  "required": ["timestamp", "type", "plan_type", "recommendations"],
+  "properties": {
+    "timestamp": {"type": "string"},
+    "type": {"const": "refactor_planning"},
+    "plan_type": {"const": "refactor_planning"},
+    "model_used": {"type": "string"},
+    "focus_areas": {"type": "array", "items": {"type": "string"}},
+    "recommendations": {"type": "array", "items": {"type": "object"}},
+    "priority": {"type": "string"}
+  }
+}
+

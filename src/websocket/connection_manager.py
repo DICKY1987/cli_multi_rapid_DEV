@@ -5,8 +5,18 @@ import json
 import logging
 from typing import Dict, List, Set, Optional, Any
 from dataclasses import dataclass
-from fastapi import WebSocket, WebSocketDisconnect
-import redis
+try:  # Make FastAPI optional for import-time resilience in tests
+    from fastapi import WebSocket, WebSocketDisconnect
+except Exception:  # pragma: no cover - fallback for environments without fastapi
+    class WebSocket:  # type: ignore
+        pass
+
+    class WebSocketDisconnect(Exception):  # type: ignore
+        pass
+try:
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - allow running without redis module
+    redis = None  # type: ignore
 import uuid
 from typing import Optional as _Optional
 

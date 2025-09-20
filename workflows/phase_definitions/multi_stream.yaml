@@ -75,9 +75,27 @@ streams:
       - phase10  # Runbooks & On-Call
       - phase11  # Developer Experience
       - phase12  # Governance & Roadmap
-
+  
+  - id: stream-complete
+    label: Complete All Steps
+    name: Local Readiness & Core Checks
+    owner: Codex
+    scope:
+      paths:
+        - requirements.txt
+        - src/**
+        - workflows/**
+        - tests/**
+        - artifacts/**
+    phases:
+      - phase_win_compat_setup
+      - phase_cli_smoke
+      - phase_orchestrator_status
+      - phase_tests_core
+      - phase_validate_fixes
 execution_order:
   - parallel: [stream-a, stream-b]
   - parallel: [stream-c, stream-d]
   - sequential: [stream-e]
+  - sequential: [stream-complete]
 

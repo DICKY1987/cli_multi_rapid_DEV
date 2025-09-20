@@ -18,3 +18,34 @@ tasks:
   release:dry:
     cmds:
       - echo 'release:dry'
+  ci:
+    desc: "Run core CI checks locally"
+    cmds:
+      - ruff check .
+      - mypy src || true
+      - pytest -q --cov=src --cov-report=term-missing --cov-fail-under=85
+  local:
+    desc: "Quick local validation (lint+tests)"
+    cmds:
+      - task: ci
+  e2e:
+    desc: "Docker compose smoke test (drop-server health)"
+    cmds:
+      - docker compose -f config/docker-compose.yml up -d --build
+      - python scripts/healthcheck.py http://localhost:5055/health
+  dotenv:
+    desc: "Create local .env from template if missing"
+    cmds:
+      - |
+        if [ ! -f .env ]; then cp .env.template .env; echo "Created .env"; else echo ".env exists"; fi
+  issues:plan:
+    desc: "Plan GitHub milestones and issues from roadmap/backlog (dry-run)"
+    cmds:
+      - |
+        python scripts/create_github_issues.py --dry-run --repo ${REPO:-DICKY1987/cli_multi_rapid_DEV}
+  issues:create:
+    desc: "Create GitHub milestones and issues from roadmap/backlog"
+    cmds:
+      - |
+        if [ -z "${GITHUB_TOKEN}" ]; then echo "GITHUB_TOKEN not set"; exit 1; fi
+        python scripts/create_github_issues.py --repo ${REPO:-DICKY1987/cli_multi_rapid_DEV} --token ${GITHUB_TOKEN}

@@ -1,0 +1,107 @@
+ Objective
+
+  - Deliver an enterprise-grade completion plan for the repository, aligned
+  to the “Project Completion Orchestrator v3.0” prompt you shared. I used
+  strictness=high, self_check_passes=3, and completion_mode=comprehensive.
+
+  Context & Inputs
+
+  - Repo: cli_multi_rapid_DEV
+  - Current state:
+      - Orchestrator and phases exist; added “local readiness” stream
+  (stream-complete) and validation phase.
+      - CI added (core+extended) on Ubuntu.
+      - Fixes applied: lib/gdw_runner stub; lib/cost_tracker docstring fix;
+  optional imports for fastapi/redis/jwt; validation tests added.
+      - Open PR (clean off main): https://github.com/DICKY1987/
+  cli_multi_rapid_DEV/pull/14
+      - Known gaps tracked in issues: #9–#13.
+
+  Gap Analysis
+
+  - Ambiguity
+      - CLI scope vs. “EAFIX” domain references partially overlap (risk of
+  scope drift).
+      - Inconsistent Windows vs. Linux behavior not fully documented.
+      - Benchmarks/integration tests vs. core tests boundary undefined.
+  - Logical Process
+      - Phase execution works; dependency checks and skip logic inconsistent
+  across OS.
+      - Decision points for test gating and coverage thresholds per-lane
+  not codified.
+  - Architecture & Vulnerabilities
+      - Tests reference missing modules (now stubbed), rely on optional
+  services (fastapi/redis).
+      - Extended suite coverage below 85% (CI extended is non-blocking).
+      - Pre-push gate requires rebase; contributors need clear “lane”
+  instructions.
+  - Requirements Decomposition
+      - Clear acceptance for core readiness exists; extended/integration
+  acceptance criteria need codification (marks/fixtures).
+      - Traceability: link tests, phases, CI jobs to explicit success
+  criteria.
+  - Operational Context
+      - Local developer workflows need consistent runners and PYTHONPATH
+  setup.
+      - CI on Ubuntu is the source of truth; Windows local path should be
+  resilient.
+  - Task Error Recovery
+      - Workflows have dry-run; no explicit rollback docs for config/script
+  changes.
+      - CI retry and lane-based PR rules exist; needs contributor-facing
+  runbook.
+
+  Roadmap (Phased)
+
+  - Phase A: Foundation Stabilization
+      - Goals: resolve blockers, harden tests/CI, codify OS variance.
+      - Work Streams:
+      - Test hygiene: mark integration/benchmark tests; add
+  `pytest.importorskip` where appropriate; ensure missing modules or stubs
+  exist; fix brittle imports.
+      - CI lanes: ensure core job blocks; extended continues-on-error, with
+  a path to tighten later.
+      - Requirements: add Windows guard for semgrep (done), document
+  platform differences.
+      - Docs: contributor quickstart, PYTHONPATH guidance; local run
+  scripts.
+  - Success Criteria:
+      - Core CI green; local stream `stream-complete` green; extended CI
+  surfaces ≤ 3 minors.
+      - No import-time failures across OS for core paths.
+  - Phase B: Core Feature Development
+      - Goals: complete orchestrator feature set with deterministic+AI
+  routing and policy gates.
+      - Work Streams:
+      - Orchestrator: enrich templates, expand phases, add policy-driven
+  routing; finalize stream scopes and gating.
+      - Cost tracking: coverage and test fixtures for cost paths; outputs in
+  `artifacts/`.
+      - Integrations: clarify external deps (fastapi/redis); add mocks/
+  fixtures for local runs.
+  - Success Criteria:
+      - ≥ 90% coverage for orchestrator/core modules; workflows validated;
+  artifacts generated consistently.
+  - Phase C: Production Readiness
+      - Goals: containerized pipeline and security posture.
+      - Work Streams:
+      - CI/CD: build and publish container (Dockerfile present); SBOM +
+  signing; matrix tests.
+      - Security: CodeQL (already added), secret scanning; pinned
+  dependencies; vulnerability scanning.
+      - Observability: structured logs; minimal dashboards/templates linked;
+  prometheus exporter where applicable.
+  - Success Criteria:
+      - Release pipeline runs on tags; SBOM/cosign artifacts attached;
+      - scorecards pass.
+  - Phase D: Launch & Stabilization
+      - Goals: documentation, support, and steady-state quality.
+      - Work Streams:
+      - Docs & runbooks: developer onboarding, incident response, release
+  playbooks.
+      - Feedback loop: PR templates; coverage thresholds ratchet up;
+  performance tracking.
+  - Success Criteria:
+      - Full production pipeline validated; user docs available; <1% error
+      - rate under normal cycles.
+

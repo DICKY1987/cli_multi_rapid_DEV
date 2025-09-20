@@ -1,58 +1,40 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Source code: `src/cli_multi_rapid` (primary CLI orchestrator). Supporting libs preserved: `src/integrations`, `src/websocket`, `src/observability`, `src/idempotency`.
-- Workflows: `.ai/workflows/` (YAML workflow definitions), `.ai/schemas/` (JSON Schema validation).
-- Tests: `tests/` (unit/pytest). Runtime outputs: `artifacts/`, `logs/`, `cost/`.
-- Configuration: `config/` (tool configs), `scripts/` (development helpers).
+- Source: `src/cli_multi_rapid` (CLI orchestrator), supporting libs: `src/integrations`, `src/websocket`, `src/observability`, `src/idempotency`.
+- Workflows: `.ai/workflows/` (YAML), `.ai/schemas/` (JSON Schemas).
+- Tests: `tests/` (unit/integration/benchmarks); Docs: `docs/` (guides, contracts);
+  Extension: `vscode-extension/`; Config: `config/`; Scripts: `scripts/`.
 
 ## Build, Test, and Development Commands
-- Run CLI orchestrator: `cli-orchestrator run .ai/workflows/PY_EDIT_TRIAGE.yaml --files "src/**/*.py"`
-- Entry point commands: `cli-orchestrator verify artifacts/diagnostics.json --schema .ai/schemas/diagnostics.schema.json`
-- Workflow execution: `cli-orchestrator run .ai/workflows/CODE_QUALITY.yaml --dry-run`
-- Cost tracking: `cli-orchestrator cost report --last-run`
-- Tests: `pytest -q --cov=src` (coverage gate) | `python -m unittest -v`
-- Git operations: `cli-orchestrator pr create --from artifacts/ --title "Auto fixes"`
+- Setup (dev): `pip install -e .[dev]` (Python), `npm ci` in `vscode-extension/`.
+- Quick checks: `task ci` (ruff, mypy, pytest + coverage gate).
+- Run tests: `pytest -q --cov=src --cov-fail-under=85`.
+- Compose smoke: `docker compose -f config/docker-compose.yml up -d` then
+  `python scripts/healthcheck.py http://localhost:5055/health`.
+- Orchestrator (dry-run): `cli-orchestrator run .ai/workflows/CODE_QUALITY.yaml --dry-run`.
+- Extension CI: `(cd vscode-extension && npm run ci)`.
 
 ## Coding Style & Naming Conventions
-- Python 3.9+, 4-space indents, prefer type hints.
-- Naming: snake_case modules/functions; PascalCase classes.
-- Lint/format/type: `ruff`, `black`, `isort`, `mypy`. Security/SAST: `bandit`, `detect-secrets` (run locally or via CI).
+- Python 3.9+, 4-space indents, prefer type hints. Names: snake_case for modules/functions; PascalCase for classes.
+- Lint/format/type: `ruff`, `black`, `isort`, `mypy`. Install pre-commit hooks: `pre-commit install`.
+- Keep changes minimal, deterministic, and schema-driven.
 
 ## Testing Guidelines
-- Frameworks: `pytest` and `unittest`; schema validation with `jsonschema`.
-- Coverage: ≥ 85% (enforced by pytest configuration). Run `pytest -q --cov=src` before PRs.
+- Framework: `pytest`; coverage gate: ≥ 85% (enforced in CI).
 - Naming: files `tests/test_*.py`, classes `Test*`, functions `test_*`.
-
-## Workflow Development Guidelines
-- All workflows must validate against `.ai/schemas/workflow.schema.json`
-- Prefer deterministic tools over AI when possible (policy: `prefer_deterministic: true`)
-- Implement proper cost tracking for AI operations
-- Use gates for quality control (`tests_pass`, `diff_limits`, `schema_valid`)
-- Emit structured artifacts for all steps
+- Contract tests live under `tests/contracts/`; see `docs/contracts/INTERFACE_GUIDE.md` for models.
 
 ## Commit & Pull Request Guidelines
-- Use Conventional Commits (e.g., `feat:`, `fix:`, `chore:`) with clear scope.
-- PRs: concise description, linked issues, include artifact summaries when relevant.
-- Rebase on `main` before merge; CI must pass (lint, type, tests, schema validation).
+- Use Conventional Commits (e.g., `feat:`, `fix:`, `chore:`) with concise scope.
+- Before PR: run `task ci` and the compose smoke test; ensure no secrets/keys in diffs.
+- PRs include: clear description, linked issues/milestones, and any artifacts (coverage, screenshots/logs where relevant).
 
-## CLI Orchestrator Architecture
-- **Deterministic → AI Routing**: Scripts first, escalate to AI only when judgment required
-- **Schema-Driven**: All workflows validated by JSON Schema before execution
-- **Cost-Aware**: Token tracking, budget enforcement, prefer cheaper deterministic tools
-- **Gate System**: Quality gates with artifact validation at each step
-- **Lane-based Git**: Structured branching for conflict-free parallel development
+## Security & Configuration Tips
+- Do not commit secrets. Secret scans run via pre-commit (`detect-secrets`) and CI; baseline: `.secrets.baseline`.
+- Copy `.env.template` to `.env` for local runs; never push `.env`.
+- Prefer deterministic tools first; avoid networked calls in tests.
 
-## Agent-Specific Notes
-- Keep changes minimal and aligned with workflow-driven patterns.
-- Validate workflows locally: `cli-orchestrator run workflow.yaml --dry-run`
-- Test schema compliance: `cli-orchestrator verify artifact.json --schema schema.json`
-- Scope: This `AGENTS.md` applies to the CLI orchestrator repository; direct user instructions take precedence.
+## Agent-Specific Instructions
+- Follow this AGENTS.md across the repo. Validate workflows with dry-runs, respect schemas, and keep outputs reproducible. When in doubt, propose changes in small, reviewable PRs.
 
-## Available Actors
-- `vscode_diagnostics`: Run diagnostic analysis (ruff, mypy, python)
-- `code_fixers`: Apply deterministic fixes (black, isort, ruff --fix)
-- `ai_editor`: AI-powered editing (aider, claude, gemini)
-- `pytest_runner`: Run tests with coverage reporting
-- `verifier`: Check gates and validate artifacts
-- `git_ops`: Git operations and PR creation
