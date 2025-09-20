@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Architecture Analysis Artifact",
+  "type": "object",
+  "required": ["timestamp", "type", "analysis_type", "summary"],
+  "properties": {
+    "timestamp": {"type": "string"},
+    "type": {"const": "architecture_analysis"},
+    "analysis_type": {"const": "architecture_analysis"},
+    "model_used": {"type": "string"},
+    "findings": {"type": "array", "items": {"type": "object"}},
+    "risk_areas": {"type": "array", "items": {"type": "string"}},
+    "summary": {"type": "object"}
+  }
+}
+
