@@ -32,7 +32,7 @@ def validate_schema(plan: dict, schema_path: Path) -> None:
     if jsonschema is None:
         print('[warn] jsonschema not installed; skipping schema validation')
         return
-    with schema_path.open('r', encoding='utf-8') as f:
+    with schema_path.open('r', encoding='utf-8-sig') as f:
         schema = json.load(f)
     jsonschema.validate(plan, schema)
 
@@ -285,3 +285,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
