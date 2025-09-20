@@ -23,7 +23,7 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
+    "commands": [ {"command":"cliMultiRapid.runStreamComplete","title":"Run Stream: stream-complete","category":"CLI Multi-Rapid"}, {"command":"cliMultiRapid.estimateAICost","title":"Estimate AI Cost (Demo)","category":"CLI Multi-Rapid"},
       {
         "command": "cliMultiRapid.openCockpit",
         "title": "Open Workflow Cockpit",

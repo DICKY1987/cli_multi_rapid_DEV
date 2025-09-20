@@ -65,17 +65,56 @@ class GitOpsAdapter(BaseAdapter):
                     {"message": message, "stdout": result.stdout, "stderr": result.stderr},
                 )
             elif op == "open_pr":
-                # Mock PR creation: emit structured metadata
                 title = params.get("title", "Automated PR")
                 body = params.get("body", "Opened by git_ops adapter")
                 base = params.get("base", "main")
                 head = params.get("head") or self._current_branch()
-                pr_url = f"https://example.com/repo/compare/{base}...{head}#pr"
+                real = bool(params.get("real", False))
+
+                pr_url = None
+                if real:
+                    # Try GitHub CLI first
+                    try:
+                        gh_cmd = [
+                            "gh",
+                            "pr",
+                            "create",
+                            "--title",
+                            title,
+                            "--body",
+                            body,
+                            "--base",
+                            base,
+                            "--head",
+                            head,
+                        ]
+                        gh_res = subprocess.run(gh_cmd, capture_output=True, text=True, timeout=60)
+                        stdout = (gh_res.stdout or "").strip()
+                        if gh_res.returncode == 0 and stdout.startswith("https://"):
+                            pr_url = stdout.splitlines()[-1].strip()
+                            result = GitCommandResult(True, gh_res.stdout, gh_res.stderr, gh_res.returncode)
+                        else:
+                            # Fallback to mock if gh failed
+                            result = GitCommandResult(False, gh_res.stdout, gh_res.stderr, gh_res.returncode)
+                    except Exception as e:
+                        result = GitCommandResult(False, "", str(e), 1)
+                else:
+                    result = GitCommandResult(True)
+
+                if not pr_url:
+                    pr_url = f"https://example.com/repo/compare/{base}...{head}#pr"
+
                 artifact = self._artifact(
                     "git.pr",
-                    {"title": title, "body": body, "base": base, "head": head, "url": pr_url},
+                    {
+                        "title": title,
+                        "body": body,
+                        "base": base,
+                        "head": head,
+                        "url": pr_url,
+                        "mode": "real" if real else "mock",
+                    },
                 )
-                result = GitCommandResult(True)
             elif op == "label":
                 label = params.get("label", "automation")
                 artifact = self._artifact("git.label", {"label": label})
@@ -152,4 +191,3 @@ class GitOpsAdapter(BaseAdapter):
                 json.dump(obj, f, indent=2)
             written.append(str(dest))
         return written
-

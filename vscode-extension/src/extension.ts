@@ -9,6 +9,8 @@ export function activate(context: vscode.ExtensionContext) {
     const commands = [
         vscode.commands.registerCommand('cliMultiRapid.openCockpit', openCockpit),
         vscode.commands.registerCommand('cliMultiRapid.startWorkflow', startWorkflow),
+        vscode.commands.registerCommand('cliMultiRapid.runStreamComplete', runStreamComplete),
+        vscode.commands.registerCommand('cliMultiRapid.estimateAICost', estimateAICost),
     ];
 
     commands.forEach(cmd => context.subscriptions.push(cmd));
@@ -47,6 +49,46 @@ async function startWorkflow() {
         vscode.window.showInformationMessage(`Workflow started: ${description}`);
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to start workflow: ${error}`);
+    }
+}
+
+async function runStreamComplete() {
+    try {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+        const root = workspaceFolders[0].uri.fsPath;
+        const term = vscode.window.createTerminal({ name: 'CLI Multi-Rapid: stream-complete', cwd: root });
+        const isWindows = process.platform === 'win32';
+        const cmd = isWindows
+            ? 'set PYTHONPATH=src&& python -m workflows.orchestrator run-stream stream-complete'
+            : 'PYTHONPATH=src python -m workflows.orchestrator run-stream stream-complete';
+        term.show(true);
+        term.sendText(cmd);
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to run stream: ${error}`);
+    }
+}
+
+async function estimateAICost() {
+    try {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+        const root = workspaceFolders[0].uri.fsPath;
+        const term = vscode.window.createTerminal({ name: 'CLI Multi-Rapid: AI Cost', cwd: root });
+        const isWindows = process.platform === 'win32';
+        const cmd = isWindows
+            ? 'set PYTHONPATH=src&& python -c "from cli_multi_rapid.adapters.cost_estimator import CostEstimatorAdapter; step={\'actor\':\'cost_estimator\', \'with\':{\'workflow\':\'.ai/workflows/AI_WORKFLOW_DEMO.yaml\'}, \'emits\':[\'artifacts/ai-cost.json\']}; print(CostEstimatorAdapter().execute(step))"'
+            : 'PYTHONPATH=src python -c "from cli_multi_rapid.adapters.cost_estimator import CostEstimatorAdapter; step={\'actor\':\'cost_estimator\', \'with\':{\'workflow\':\'.ai/workflows/AI_WORKFLOW_DEMO.yaml\'}, \'emits\':[\'artifacts/ai-cost.json\']}; print(CostEstimatorAdapter().execute(step))"';
+        term.show(true);
+        term.sendText(cmd);
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to estimate cost: ${error}`);
     }
 }
 
