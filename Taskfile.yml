@@ -18,3 +18,14 @@ tasks:
   release:dry:
     cmds:
       - echo 'release:dry'
+  issues:plan:
+    desc: "Plan GitHub milestones and issues from roadmap/backlog (dry-run)"
+    cmds:
+      - |
+        python scripts/create_github_issues.py --dry-run --repo ${REPO:-DICKY1987/cli_multi_rapid_DEV}
+  issues:create:
+    desc: "Create GitHub milestones and issues from roadmap/backlog"
+    cmds:
+      - |
+        if [ -z "${GITHUB_TOKEN}" ]; then echo "GITHUB_TOKEN not set"; exit 1; fi
+        python scripts/create_github_issues.py --repo ${REPO:-DICKY1987/cli_multi_rapid_DEV} --token ${GITHUB_TOKEN}
