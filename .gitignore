@@ -1,88 +1,35 @@
-# Subdirectories that are separate git repos
-atomic-agents/
-autogen/
-Brainstorm-pipeline-Json/
-claude-flow/
-eafix-modular/
-taskflow/
-cli_multi_rapid_DEV/
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
 
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
+*.pyc
+.pytest_cache/
+.nox/
+.tox/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
 .venv/
-env/
 venv/
 
-# Pyinstaller
-*.manifest
-*.spec
-
-# Unit test / coverage reports
-.coverage
-.pytest_cache/
-htmlcov/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# PyCharm
-.idea/
-
-# VS Code
-.vscode/
-!.vscode/tasks.json
-
-# MacOS
-.DS_Store
-
-# Windows
-Thumbs.db
-ehthumbs.db
-
-# Temporary files
-*.swp
-*.bak
-*.tmp
-!*.patch
-!*.diff
-
-# Logs
-*.log
-
-# Agentic artifacts
-.ai/
-.ai/*.jsonl
-
-# Node
+# Node/TS
 node_modules/
+dist/
+out/
+coverage/
 
-# Dotenv
-.env
-.env.*
+# Local artifacts
+artifacts/
+logs/
 
-# VS Code backups
-.vscode.backup-*/
-.worktrees/
+# Docker
+*.local.yml
+
+# Nested repos or external projects (keep out)
+Autonomous-_content-_creation_-TFP-Enterprises/
+
