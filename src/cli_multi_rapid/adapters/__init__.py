@@ -13,6 +13,8 @@ from .base_adapter import AdapterResult, AdapterType, BaseAdapter
 from .code_fixers import CodeFixersAdapter
 from .pytest_runner import PytestRunnerAdapter
 from .vscode_diagnostics import VSCodeDiagnosticsAdapter
+from .git_ops import GitOpsAdapter
+from .cost_estimator import CostEstimatorAdapter
 
 __all__ = [
     "BaseAdapter",
@@ -24,4 +26,6 @@ __all__ = [
     "CodeFixersAdapter",
     "PytestRunnerAdapter",
     "VSCodeDiagnosticsAdapter",
+    "GitOpsAdapter",
+    "CostEstimatorAdapter",
 ]

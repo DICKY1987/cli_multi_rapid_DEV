@@ -11,6 +11,13 @@ policy:
   budget_limit_usd: 5.00
 
 steps:
+
+  - id: "0.001"
+    name: "Estimate AI Cost"
+    actor: cost_estimator
+    with:
+      workflow: ".ai/workflows/AI_WORKFLOW_DEMO.yaml"
+    emits: ["artifacts/ai-cost.json"]
   - id: "1.001"
     name: "Initial Code Review"
     actor: ai_analyst
@@ -71,6 +78,13 @@ steps:
     when: "artifacts/ai-improvements.json exists"
 
 gates:
+
+  - type: token_budget
+    description: "Enforce budget limit for AI steps"
+    tokens_file: "artifacts/ai-cost.json"
+    max_tokens: 50000
+    max_usd: 5.00
+
   - type: tests_pass
     description: "Ensure all tests still pass after AI improvements"
     source: "artifacts/test-results.json"

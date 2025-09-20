@@ -250,25 +250,110 @@ class Verifier:
     def _check_schema_valid_gate(
         self, gate_config: Dict[str, Any], artifacts_dir: Path
     ) -> GateResult:
-        """Check if all artifacts have valid schemas."""
+        """Check if all artifacts have valid schemas.
 
-        schema_dir = Path(gate_config.get("schema_dir", ".ai/schemas"))
+        Expects a list of artifact paths under gate_config['artifacts'] and
+        uses a filename→schema heuristic unless an explicit mapping is given.
+        """
 
-        # This is a simplified check - in practice, you'd validate all artifacts
-        return GateResult(
-            gate_name="schema_valid",
-            passed=True,
-            message="Schema validation passed",
-            details={"schema_dir": str(schema_dir)},
-        )
+        try:
+            artifacts = gate_config.get("artifacts", [])
+            schema_dir = Path(gate_config.get("schema_dir", ".ai/schemas"))
+            mapping: Dict[str, str] = gate_config.get("schema_map", {})
+
+            if not artifacts:
+                return GateResult(
+                    gate_name="schema_valid",
+                    passed=True,
+                    message="No artifacts specified",
+                )
+
+            all_ok = True
+            details: Dict[str, Any] = {}
+            for art in artifacts:
+                art_path = artifacts_dir / art if not art.startswith("/") else Path(art)
+                # Determine schema path
+                schema_file: Optional[Path] = None
+                if mapping and art in mapping:
+                    schema_file = Path(mapping[art])
+                else:
+                    name = Path(art).name
+                    if "code-review" in name:
+                        schema_file = schema_dir / "ai_code_review.schema.json"
+                    elif "architecture" in name:
+                        schema_file = schema_dir / "ai_architecture_analysis.schema.json"
+                    elif "refactor-plan" in name:
+                        schema_file = schema_dir / "ai_refactor_plan.schema.json"
+                    elif "test-plan" in name:
+                        schema_file = schema_dir / "ai_test_plan.schema.json"
+                    elif "improvements" in name:
+                        schema_file = schema_dir / "ai_improvements.schema.json"
+
+                ok = self.verify_artifact(art_path, schema_file)
+                details[str(art_path)] = ok
+                all_ok = all_ok and ok
+
+            return GateResult(
+                gate_name="schema_valid",
+                passed=all_ok,
+                message="All artifacts valid" if all_ok else "One or more artifacts invalid",
+                details=details,
+            )
+        except Exception as e:
+            return GateResult(
+                gate_name="schema_valid", passed=False, message=f"Schema gate error: {e}"
+            )
 
     def _check_token_budget_gate(
         self, gate_config: Dict[str, Any], artifacts_dir: Path
     ) -> GateResult:
         """Check if token usage is within budget."""
+        try:
+            max_tokens = gate_config.get("max_tokens")
+            max_usd = gate_config.get("max_usd")
+            tokens_file = artifacts_dir / (gate_config.get("tokens_file", "ai-cost.json"))
 
-        max_tokens = gate_config.get("max_tokens", 50000)
+            if not tokens_file.exists():
+                return GateResult(
+                    gate_name="token_budget",
+                    passed=False,
+                    message=f"Tokens file not found: {tokens_file}",
+                )
 
+            with open(tokens_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            total_tokens = int(data.get("total_estimated_tokens", 0))
+            est_usd = float(data.get("estimated_cost_usd", 0.0))
+
+            if max_tokens is not None and total_tokens > int(max_tokens):
+                return GateResult(
+                    gate_name="token_budget",
+                    passed=False,
+                    message=f"Token budget exceeded: {total_tokens} > {max_tokens}",
+                    details={"tokens": total_tokens, "max_tokens": max_tokens, "usd": est_usd},
+                )
+
+            if max_usd is not None and est_usd > float(max_usd):
+                return GateResult(
+                    gate_name="token_budget",
+                    passed=False,
+                    message=f"USD budget exceeded: ${est_usd:.4f} > ${float(max_usd):.4f}",
+                    details={"tokens": total_tokens, "usd": est_usd, "max_usd": max_usd},
+                )
+
+            return GateResult(
+                gate_name="token_budget",
+                passed=True,
+                message="Within budget",
+                details={"tokens": total_tokens, "usd": est_usd, "max_tokens": max_tokens, "max_usd": max_usd},
+            )
+        except Exception as e:
+            return GateResult(
+                gate_name="token_budget",
+                passed=False,
+                message=f"Token budget gate error: {e}",
+            )
         # Try to get actual token usage from cost tracker
         try:
             from .cost_tracker import CostTracker

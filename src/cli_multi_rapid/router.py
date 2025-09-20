@@ -17,6 +17,7 @@ from .adapters.ai_editor import AIEditorAdapter
 from .adapters.code_fixers import CodeFixersAdapter
 from .adapters.pytest_runner import PytestRunnerAdapter
 from .adapters.vscode_diagnostics import VSCodeDiagnosticsAdapter
+from .adapters.cost_estimator import CostEstimatorAdapter
 
 console = Console()
 
@@ -46,6 +47,8 @@ class Router:
         self.registry.register(CodeFixersAdapter())
         self.registry.register(PytestRunnerAdapter())
         self.registry.register(VSCodeDiagnosticsAdapter())
+        from .adapters.git_ops import GitOpsAdapter
+        self.registry.register(GitOpsAdapter())
 
         # Register AI-powered adapters
         self.registry.register(AIEditorAdapter())
@@ -118,47 +121,3 @@ class Router:
         )
 
     def _find_deterministic_alternative(self, ai_actor: str) -> Optional[str]:
-        """Find a deterministic alternative for an AI actor."""
-        alternatives = {
-            "ai_editor": "code_fixers",  # For simple fixes, prefer automated tools
-            "ai_analyst": "vscode_diagnostics",  # For analysis, prefer static analysis
-        }
-        return alternatives.get(ai_actor)
-
-    def get_available_actors(self) -> List[str]:
-        """Get list of all available actors."""
-        return self.registry.list_adapters()
-
-    def estimate_workflow_cost(self, workflow: Dict[str, Any]) -> Dict[str, Any]:
-        """Estimate the total cost of executing a workflow."""
-        steps = workflow.get("steps", [])
-        policy = workflow.get("policy", {})
-
-        total_tokens = 0
-        deterministic_steps = 0
-        ai_steps = 0
-
-        for step in steps:
-            decision = self.route_step(step, policy)
-
-            # Use registry to get accurate cost estimate
-            actor = step.get("actor", "unknown")
-            if self.registry.is_available(actor):
-                step_tokens = self.registry.estimate_cost(actor, step)
-            else:
-                step_tokens = decision.estimated_tokens
-
-            total_tokens += step_tokens
-
-            if decision.adapter_type == "deterministic":
-                deterministic_steps += 1
-            else:
-                ai_steps += 1
-
-        return {
-            "total_estimated_tokens": total_tokens,
-            "deterministic_steps": deterministic_steps,
-            "ai_steps": ai_steps,
-            "estimated_cost_usd": total_tokens * 0.00001,  # Rough estimate
-            "routing_decisions": len(steps),
-        }
