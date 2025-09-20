@@ -136,4 +136,5 @@ def metrics():  # pragma: no cover - integration endpoint
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5055"))
-    app.run(host="127.0.0.1", port=port)
+    host = os.getenv("HOST", "127.0.0.1")
+    app.run(host=host, port=port)

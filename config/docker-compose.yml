@@ -1,0 +1,16 @@
+version: '3.9'
+services:
+  drop-server:
+    build:
+      context: ..
+      dockerfile: config/docker/drop-server/Dockerfile
+    ports:
+      - "5055:5055"
+    environment:
+      - ALLOW_LOCALHOST_NO_TOKEN=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:5055/health'); print('ok')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
