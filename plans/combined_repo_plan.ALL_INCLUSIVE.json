@@ -45,7 +45,8 @@
         "<prefill>",
         "\"dup_threshold\": 0.92"
       ],
-      "phase": "validate"
+      "phase": "validate",
+      "optional": true
     },
     {
       "op": "locate",
@@ -66,7 +67,8 @@
       "phase": "apply",
       "dry_run_effect": "scan_only",
       "allow_multiple_matches": false,
-      "on_duplicate": "skip"
+      "on_duplicate": "skip",
+      "optional": true
     },
     {
       "op": "write_file",
@@ -231,7 +233,7 @@
   ],
   "plan_fingerprint": {
     "method": "sha256_ops",
-    "value": "d270e804708e15dfb82d448cfa88fb8028540e50f031a5c28c3212827adc4751"
+    "value": "4e546fd7e576d174b5b61477fbf5f0acb35da43d5287bb11c67a19e66438b5db"
   },
   "$schema": ".ai/schemas/combined_plan.schema.json"
 }
