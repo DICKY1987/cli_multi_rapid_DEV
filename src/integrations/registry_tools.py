@@ -108,14 +108,9 @@ def detect_all(runner: ProcessRunner) -> Dict[str, ToolProbe]:
     probes["node"] = probe_binary(runner, paths["node"], ["-v"])
     probes["npx"] = probe_binary(runner, paths["npx"], ["--version"])
 
-    # AI CLIs: allow either
+    # AI CLIs: allow either; prefer npx openai for reliability on Windows
     if sel.ai_cli == "openai":
-        # Prefer npx openai when direct binary missing; simple version check
-        if probes["openai"].ok if "openai" in paths else False:
-            probes["openai"] = probe_binary(runner, paths.get("openai", "openai"), ["--version"])
-        else:
-            # Try via npx
-            probes["openai"] = probe_binary(runner, paths["npx"], ["openai", "--version"])  # type: ignore[arg-type]
+        probes["openai"] = probe_binary(runner, paths["npx"], ["openai", "--version"])  # type: ignore[arg-type]
     else:
         probes["claude"] = probe_binary(runner, paths["claude"], ["--version"])
 
@@ -126,4 +121,3 @@ def detect_all(runner: ProcessRunner) -> Dict[str, ToolProbe]:
     probes["semgrep"] = probe_binary(runner, paths["semgrep"], ["--version"])
 
     return probes
-

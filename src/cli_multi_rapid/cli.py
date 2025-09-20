@@ -247,6 +247,7 @@ def parse_args(argv: Optional[List[str]] = None) -> CLIArgs:
     tools_parser = subparsers.add_parser("tools", help="Tooling utilities")
     tools_sub = tools_parser.add_subparsers(dest="tools_cmd", required=True)
     tools_sub.add_parser("doctor", help="Probe and report installed tools")
+    tools_sub.add_parser("versions", help="Print one-line versions for tools")
 
     # quality subcommand (ruff/mypy/bandit/semgrep)
     quality_parser = subparsers.add_parser("quality", help="Run Python quality tools")
@@ -657,6 +658,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                     return 0 if all(p.ok for p in probes.values()) else 1
                 except Exception as exc:
                     print(f"Error: tools doctor failed: {exc}", file=sys.stderr)
+                    return 1
+            elif tools_cmd == "versions":
+                try:
+                    from integrations.process import ProcessRunner
+                    from integrations.registry_tools import detect_all
+                    runner = ProcessRunner(dry_run=False)
+                    probes = detect_all(runner)
+                    for name, p in probes.items():
+                        status = "ok" if p.ok else "missing"
+                        print(f"{name}: {p.version or 'n/a'} ({status})")
+                    return 0
+                except Exception as exc:
+                    print(f"Error: tools versions failed: {exc}", file=sys.stderr)
                     return 1
             else:
                 print("Error: unknown tools subcommand", file=sys.stderr)
