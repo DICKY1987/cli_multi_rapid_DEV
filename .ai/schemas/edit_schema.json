@@ -1,0 +1,34 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/edit-command.json",
+  "title": "AI Edit Command Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "edit_id", "file_path", "edit_type", "created_at"],
+  "properties": {
+    "version": {"type": "string", "enum": ["1.0.0"]},
+    "edit_id": {"type": "string", "pattern": "^edit_[a-zA-Z0-9]{8}$"},
+    "file_path": {"type": "string", "pattern": "^[^\u0000<>:\"|?*]+$"},
+    "edit_type": {"type": "string", "enum": ["replace", "insert", "delete", "append", "prepend", "create_file"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "description": {"type": "string", "maxLength": 200},
+    "rationale": {"type": "string", "maxLength": 500},
+    "safety_checks": {"type": "object", "additionalProperties": false, "required": ["backup_required", "destructive"],
+      "properties": {"backup_required": {"type": "boolean"}, "destructive": {"type": "boolean"}, "affects_api": {"type": "boolean"}}},
+    "start_line": {"type": "integer", "minimum": 1},
+    "end_line": {"type": "integer", "minimum": 1},
+    "new_content": {"type": "string"},
+    "original_content": {"type": "string"},
+    "line_number": {"type": "integer", "minimum": 0},
+    "content": {"type": "string"},
+    "content_to_delete": {"type": "string"},
+    "permissions": {"type": "string", "pattern": "^[0-7]{3}$"}
+  },
+  "allOf": [
+    {"if": {"properties": {"edit_type": {"const": "replace"}}}, "then": {"required": ["start_line", "end_line", "new_content"]}},
+    {"if": {"properties": {"edit_type": {"const": "insert"}}}, "then": {"required": ["line_number", "content"]}},
+    {"if": {"properties": {"edit_type": {"const": "delete"}}}, "then": {"required": ["start_line", "end_line"]}},
+    {"if": {"properties": {"edit_type": {"enum": ["append", "prepend"]}}}, "then": {"required": ["content"]}},
+    {"if": {"properties": {"edit_type": {"const": "create_file"}}}, "then": {"required": ["content"]}}
+  ]
+}
