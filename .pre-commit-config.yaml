@@ -1,5 +1,5 @@
-# Enterprise Pre-commit Quality Gates
-# Comprehensive linting, security scanning, and validation pipeline
+# CLI Orchestrator Pre-commit Quality Gates
+# Comprehensive linting, security scanning, and validation pipeline for CLI orchestrator
 
 repos:
   # Python formatting and linting

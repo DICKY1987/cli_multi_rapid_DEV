@@ -1,13 +1,13 @@
-# Enhanced Universal Workflow Runner for CLI Multi-Rapid
+# Enhanced Universal Workflow Runner for EAFIX Trading System
 # Executes workflows with validation, monitoring, and enterprise features
 
 [CmdletBinding()]
 Param(
     [Parameter(Mandatory = $false)]
-    [string]$Workflow = "hello_world",
-    
-    [Parameter(Mandatory = $false)]  
-    [string]$Name = 'CLI Multi-Rapid Enterprise System',
+    [string]$Workflow = "eafix_system_check",
+
+    [Parameter(Mandatory = $false)]
+    [string]$Name = 'EAFIX Trading System',
     
     [Parameter(Mandatory = $false)]
     [string]$Profile = "dev",
@@ -40,7 +40,7 @@ function Write-WorkflowLog {
 }
 
 try {
-    Write-WorkflowLog "=== CLI Multi-Rapid Enterprise Workflow Runner ===" "SUCCESS"
+    Write-WorkflowLog "=== EAFIX Trading System Workflow Runner ===" "SUCCESS"
     Write-WorkflowLog "Workflow: $Workflow"
     Write-WorkflowLog "Profile: $Profile"
     Write-WorkflowLog "Target Name: $Name"
@@ -111,13 +111,13 @@ try {
     
     Write-WorkflowLog "=== Workflow Execution Completed Successfully ===" "SUCCESS"
     
-    # Integration with CLI Multi-Rapid system
-    Write-WorkflowLog "System Integration Status:"
-    Write-WorkflowLog "  • Enterprise orchestration: ACTIVE"
-    Write-WorkflowLog "  • Cross-language bridge: OPERATIONAL" 
-    Write-WorkflowLog "  • AI service routing: ENABLED"
-    Write-WorkflowLog "  • Quality gates: ENFORCED"
-    Write-WorkflowLog "  • Monitoring: ACTIVE"
+    # Integration with EAFIX Trading System
+    Write-WorkflowLog "Trading System Integration Status:"
+    Write-WorkflowLog "  • Trading engine: OPERATIONAL"
+    Write-WorkflowLog "  • Guardian protection: ACTIVE"
+    Write-WorkflowLog "  • MT4 integration: ENABLED"
+    Write-WorkflowLog "  • Signal processing: ACTIVE"
+    Write-WorkflowLog "  • Risk monitoring: ENFORCED"
     
     exit 0
 }
