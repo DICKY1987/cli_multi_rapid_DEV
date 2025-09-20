@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CLI Orchestrator Workflow Schema",
+  "description": "Schema for validating CLI orchestrator workflow YAML files",
+  "type": "object",
+  "required": ["name", "steps"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Workflow name",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional workflow description"
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Workflow input parameters",
+      "properties": {
+        "files": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "array", "items": {"type": "string"}}
+          ],
+          "description": "File patterns to process"
+        },
+        "lane": {
+          "type": "string",
+          "description": "Git branch lane for work"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "description": "Workflow execution policies",
+      "properties": {
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum tokens to spend on AI operations"
+        },
+        "prefer_deterministic": {
+          "type": "boolean",
+          "description": "Prefer deterministic tools over AI when possible"
+        },
+        "timeout_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum workflow execution time"
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Workflow execution steps",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "actor"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+$",
+            "description": "Step identifier (e.g., '1.001')"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable step name"
+          },
+          "actor": {
+            "type": "string",
+            "enum": [
+              "vscode_diagnostics",
+              "code_fixers",
+              "ai_editor",
+              "pytest_runner",
+              "verifier",
+              "git_ops"
+            ],
+            "description": "Actor/adapter to execute this step"
+          },
+          "with": {
+            "type": "object",
+            "description": "Step configuration parameters",
+            "properties": {
+              "analyzers": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Diagnostic analyzers to run"
+              },
+              "tools": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Tools to execute"
+              },
+              "tool": {
+                "type": "string",
+                "enum": ["aider", "claude", "gemini"],
+                "description": "AI tool to use"
+              },
+              "strategy": {
+                "type": "string",
+                "enum": ["minimal-diff", "refactor", "comprehensive"],
+                "description": "AI editing strategy"
+              },
+              "context": {
+                "type": "object",
+                "description": "Execution context for the step"
+              },
+              "path": {
+                "type": "string",
+                "description": "Path for testing or analysis"
+              },
+              "coverage": {
+                "type": "boolean",
+                "description": "Enable coverage reporting"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["tests_pass", "diff_limits", "schema_valid"]
+                    },
+                    "from": {
+                      "type": "string",
+                      "description": "Artifact file to check"
+                    },
+                    "max_files": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "max_insertions": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "schema": {
+                      "type": "string",
+                      "description": "Schema file path"
+                    }
+                  }
+                },
+                "description": "Gate checks to perform"
+              },
+              "branch": {
+                "type": "string",
+                "description": "Git branch to use"
+              },
+              "commit_message_template": {
+                "type": "string",
+                "description": "Template for commit message"
+              },
+              "create_pr": {
+                "type": "boolean",
+                "description": "Create pull request"
+              }
+            }
+          },
+          "when": {
+            "type": "string",
+            "description": "Condition for step execution (JavaScript-like expression)"
+          },
+          "retry": {
+            "type": "object",
+            "description": "Retry configuration",
+            "properties": {
+              "max": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5,
+                "description": "Maximum retry attempts"
+              },
+              "backoff": {
+                "type": "string",
+                "enum": ["linear", "exponential"],
+                "default": "exponential",
+                "description": "Backoff strategy"
+              }
+            }
+          },
+          "on_fail": {
+            "type": "string",
+            "enum": ["stop", "pause_for_review", "continue"],
+            "default": "stop",
+            "description": "Action to take on step failure"
+          },
+          "emits": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Artifacts emitted by this step"
+          }
+        }
+      }
+    }
+  }
+}

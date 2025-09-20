@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Diagnostics Report Schema",
+  "description": "Schema for diagnostic analysis artifacts",
+  "type": "object",
+  "required": ["timestamp", "analyzers", "issues", "summary"],
+  "properties": {
+    "timestamp": {
+      "type": "number",
+      "description": "Unix timestamp when diagnostics were run"
+    },
+    "analyzers": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "List of analyzers that were executed"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool", "message", "severity"],
+        "properties": {
+          "tool": {
+            "type": "string",
+            "description": "Tool that reported the issue"
+          },
+          "message": {
+            "type": "string",
+            "description": "Issue description"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warning", "info"],
+            "description": "Issue severity level"
+          },
+          "file": {
+            "type": "string",
+            "description": "File path where issue was found"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Line number"
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Column number"
+          },
+          "rule": {
+            "type": "string",
+            "description": "Rule or check that triggered the issue"
+          }
+        }
+      },
+      "description": "List of identified issues"
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_issues", "by_severity"],
+      "properties": {
+        "total_issues": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of issues found"
+        },
+        "by_severity": {
+          "type": "object",
+          "properties": {
+            "error": {"type": "integer", "minimum": 0},
+            "warning": {"type": "integer", "minimum": 0},
+            "info": {"type": "integer", "minimum": 0}
+          },
+          "description": "Issue count by severity"
+        },
+        "by_tool": {
+          "type": "object",
+          "patternProperties": {
+            ".*": {"type": "integer", "minimum": 0}
+          },
+          "description": "Issue count by tool"
+        }
+      }
+    }
+  }
+}

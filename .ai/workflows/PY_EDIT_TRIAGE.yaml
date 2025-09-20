@@ -1,0 +1,74 @@
+name: "Python Edit + Triage"
+description: "Analyze Python code issues and apply deterministic + AI fixes"
+
+inputs:
+  files: ["src/**/*.py"]
+  lane: "lane/ai-coding/fix-imports"
+
+policy:
+  max_tokens: 120000
+  prefer_deterministic: true
+  timeout_minutes: 10
+
+steps:
+  - id: "1.001"
+    name: "VS Code Diagnostic Analysis"
+    actor: vscode_diagnostics
+    with:
+      analyzers: ["python", "ruff", "mypy"]
+    emits: ["artifacts/diagnostics.json"]
+
+  - id: "1.002"
+    name: "Quick Deterministic Fixes"
+    actor: code_fixers
+    with:
+      tools: ["isort", "black", "ruff"]
+    when: "has_errors('artifacts/diagnostics.json', kinds=['lint','format'])"
+    emits: ["artifacts/quick_fixes.diff"]
+
+  - id: "1.003"
+    name: "AI Patch for Complex Errors"
+    actor: ai_editor
+    with:
+      tool: "aider"
+      strategy: "minimal-diff"
+      context:
+        diagnostics: "artifacts/diagnostics.json"
+        files: "{{ inputs.files }}"
+    when: "has_errors('artifacts/diagnostics.json', kinds=['import','type','logic'])"
+    retry:
+      max: 2
+      backoff: "exponential"
+    emits: ["artifacts/ai_patch.diff", "artifacts/rationale.md"]
+
+  - id: "1.004"
+    name: "Run Tests"
+    actor: pytest_runner
+    with:
+      path: "."
+      coverage: true
+    emits: ["artifacts/test_report.json"]
+
+  - id: "1.005"
+    name: "Gate: Verify & Schema"
+    actor: verifier
+    with:
+      checks:
+        - type: "tests_pass"
+          from: "artifacts/test_report.json"
+        - type: "diff_limits"
+          max_files: 50
+          max_insertions: 1000
+        - type: "schema_valid"
+          from: "artifacts/diagnostics.json"
+          schema: ".ai/schemas/diagnostics.schema.json"
+    on_fail: "pause_for_review"
+
+  - id: "1.006"
+    name: "Git Commit & PR"
+    actor: git_ops
+    with:
+      branch: "{{ inputs.lane }}"
+      commit_message_template: "fix: auto triage & repair\n\n{summary}"
+      create_pr: true
+    emits: ["artifacts/pr_url.txt"]
