@@ -7,7 +7,7 @@ configured policies and step requirements.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from rich.console import Console
 
@@ -17,7 +17,6 @@ from .adapters.ai_editor import AIEditorAdapter
 from .adapters.code_fixers import CodeFixersAdapter
 from .adapters.pytest_runner import PytestRunnerAdapter
 from .adapters.vscode_diagnostics import VSCodeDiagnosticsAdapter
-from .adapters.cost_estimator import CostEstimatorAdapter
 
 console = Console()
 
@@ -48,7 +47,22 @@ class Router:
         self.registry.register(PytestRunnerAdapter())
         self.registry.register(VSCodeDiagnosticsAdapter())
         from .adapters.git_ops import GitOpsAdapter
+
         self.registry.register(GitOpsAdapter())
+        from .adapters.github_integration import GitHubIntegrationAdapter
+
+        self.registry.register(GitHubIntegrationAdapter())
+
+        # Register tool adapter bridges
+        from .adapters.tool_adapter_bridge import ToolAdapterBridge
+
+        self.registry.register(ToolAdapterBridge("vcs"))
+        self.registry.register(ToolAdapterBridge("containers"))
+        self.registry.register(ToolAdapterBridge("editor"))
+        self.registry.register(ToolAdapterBridge("js_runtime"))
+        self.registry.register(ToolAdapterBridge("ai_cli"))
+        self.registry.register(ToolAdapterBridge("python_quality"))
+        self.registry.register(ToolAdapterBridge("precommit"))
 
         # Register AI-powered adapters
         self.registry.register(AIEditorAdapter())
@@ -56,9 +70,10 @@ class Router:
 
         # TODO: Register additional adapters:
         # - verifier (quality gates)
-        # - git_ops (PR creation)
 
-        self.console.print(f"[dim]Initialized {len(self.registry.list_adapters())} adapters[/dim]")
+        self.console.print(
+            f"[dim]Initialized {len(self.registry.list_adapters())} adapters[/dim]"
+        )
 
     def route_step(
         self, step: Dict[str, Any], policy: Optional[Dict[str, Any]] = None
@@ -121,3 +136,14 @@ class Router:
         )
 
     def _find_deterministic_alternative(self, ai_actor: str) -> Optional[str]:
+        """Suggest a deterministic alternative for a given AI actor, if any.
+
+        This provides a conservative mapping to help uphold a determinism-first
+        policy. If no sensible alternative exists, returns None.
+        """
+        mapping = {
+            # Prefer quick, cheap diagnostics/fixes when possible
+            "ai_editor": "code_fixers",
+            "ai_analyst": "vscode_diagnostics",
+        }
+        return mapping.get(ai_actor)

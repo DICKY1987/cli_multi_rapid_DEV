@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitHub PR Review Analysis Schema",
+  "description": "Schema for validating GitHub pull request review analysis artifacts",
+  "type": "object",
+  "required": ["timestamp", "analysis_type", "success", "data"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Analysis timestamp in ISO format"
+    },
+    "analysis_type": {
+      "type": "string",
+      "const": "pr_automation",
+      "description": "Analysis type identifier"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether the analysis completed successfully"
+    },
+    "data": {
+      "type": "object",
+      "required": ["repo", "timestamp"],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "Repository identifier (owner/repo)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "open_prs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["number", "title", "state", "author"],
+            "properties": {
+              "number": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Pull request number"
+              },
+              "title": {
+                "type": "string",
+                "description": "PR title"
+              },
+              "state": {
+                "type": "string",
+                "enum": ["open", "closed", "merged"],
+                "description": "PR state"
+              },
+              "author": {
+                "type": "string",
+                "description": "PR author username"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "PR creation timestamp"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "PR last update timestamp"
+              },
+              "mergeable": {
+                "type": ["boolean", "null"],
+                "description": "Whether PR can be merged"
+              },
+              "checks_status": {
+                "type": "string",
+                "enum": ["pending", "success", "failure", "unknown"],
+                "description": "CI/CD checks status"
+              },
+              "review_status": {
+                "type": "string",
+                "enum": ["pending", "approved", "changes_requested"],
+                "description": "Review status"
+              },
+              "file_changes": {
+                "type": "object",
+                "properties": {
+                  "total_files": {"type": "integer", "minimum": 0},
+                  "additions": {"type": "integer", "minimum": 0},
+                  "deletions": {"type": "integer", "minimum": 0},
+                  "changes": {"type": "integer", "minimum": 0}
+                }
+              }
+            }
+          }
+        },
+        "review_suggestions": {
+          "type": "object",
+          "description": "Automated review suggestions"
+        },
+        "merge_readiness": {
+          "type": "object",
+          "description": "PR merge readiness assessment",
+          "properties": {
+            "ready_to_merge": {
+              "type": "array",
+              "items": {"type": "integer"},
+              "description": "PR numbers ready for merge"
+            },
+            "needs_review": {
+              "type": "array",
+              "items": {"type": "integer"},
+              "description": "PR numbers needing review"
+            },
+            "has_conflicts": {
+              "type": "array",
+              "items": {"type": "integer"},
+              "description": "PR numbers with merge conflicts"
+            }
+          }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "PR automation recommendations"
+    },
+    "issues_found": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Issues identified during PR analysis"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "adapter": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    }
+  }
+}

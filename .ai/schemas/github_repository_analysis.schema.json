@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitHub Repository Analysis Schema",
+  "description": "Schema for validating GitHub repository analysis artifacts",
+  "type": "object",
+  "required": ["timestamp", "analysis_type", "success", "data"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Analysis timestamp in ISO format"
+    },
+    "analysis_type": {
+      "type": "string",
+      "enum": [
+        "repository", "security", "code_quality", "performance",
+        "dependencies", "workflow_health", "issue_triage",
+        "pr_automation", "release_management"
+      ],
+      "description": "Type of analysis performed"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether the analysis completed successfully"
+    },
+    "data": {
+      "type": "object",
+      "description": "Analysis results data",
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "Repository identifier (owner/repo)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "overview": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "description": {"type": ["string", "null"]},
+            "language": {"type": ["string", "null"]},
+            "size": {"type": "integer", "minimum": 0},
+            "stars": {"type": "integer", "minimum": 0},
+            "forks": {"type": "integer", "minimum": 0},
+            "open_issues": {"type": "integer", "minimum": 0},
+            "watchers": {"type": "integer", "minimum": 0},
+            "default_branch": {"type": "string"},
+            "created_at": {"type": "string", "format": "date-time"},
+            "updated_at": {"type": "string", "format": "date-time"},
+            "pushed_at": {"type": "string", "format": "date-time"},
+            "visibility": {"type": "string", "enum": ["public", "private"]},
+            "archived": {"type": "boolean"},
+            "disabled": {"type": "boolean"}
+          }
+        },
+        "activity": {
+          "type": "object",
+          "properties": {
+            "recent_commits": {"type": "integer", "minimum": 0},
+            "last_commit": {"type": ["string", "null"], "format": "date-time"},
+            "commit_frequency": {
+              "type": "object",
+              "properties": {
+                "daily": {"type": "integer", "minimum": 0},
+                "weekly": {"type": "integer", "minimum": 0},
+                "monthly": {"type": "integer", "minimum": 0}
+              }
+            },
+            "contributors": {"type": "integer", "minimum": 0}
+          }
+        },
+        "health_metrics": {
+          "type": "object",
+          "properties": {
+            "open_prs": {"type": "integer", "minimum": 0},
+            "merged_prs_last_30d": {"type": "integer", "minimum": 0},
+            "open_issues": {"type": "integer", "minimum": 0},
+            "closed_issues_last_30d": {"type": "integer", "minimum": 0}
+          }
+        },
+        "languages": {
+          "type": "object",
+          "patternProperties": {
+            ".*": {
+              "type": "object",
+              "properties": {
+                "bytes": {"type": "integer", "minimum": 0},
+                "percentage": {"type": "number", "minimum": 0, "maximum": 100}
+              }
+            }
+          }
+        },
+        "topics": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "recent_activity": {
+          "type": "object",
+          "properties": {
+            "recent_commits": {"type": "integer", "minimum": 0},
+            "last_commit": {"type": ["string", "null"], "format": "date-time"},
+            "open_prs": {"type": "integer", "minimum": 0},
+            "pr_titles": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        },
+        "repository_info": {
+          "type": "object",
+          "description": "Basic repository information"
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Improvement recommendations"
+    },
+    "issues_found": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Issues identified during analysis"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "adapter": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    }
+  }
+}

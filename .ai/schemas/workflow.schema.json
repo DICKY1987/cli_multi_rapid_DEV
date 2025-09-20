@@ -75,9 +75,11 @@
               "vscode_diagnostics",
               "code_fixers",
               "ai_editor",
+              "ai_analyst",
               "pytest_runner",
               "verifier",
-              "git_ops"
+              "git_ops",
+              "github_integration"
             ],
             "description": "Actor/adapter to execute this step"
           },
@@ -158,6 +160,61 @@
               "create_pr": {
                 "type": "boolean",
                 "description": "Create pull request"
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "status", "create_branch", "commit", "open_pr", "label", "assign",
+                  "repo_analysis", "create_issue", "get_issues", "pr_review",
+                  "release_info", "list_workflows", "bulk_label", "bulk_merge",
+                  "create_release", "commit_analysis"
+                ],
+                "description": "Git/GitHub operation to perform"
+              },
+              "analysis_type": {
+                "type": "string",
+                "enum": [
+                  "repository", "security", "code_quality", "performance",
+                  "dependencies", "workflow_health", "issue_triage",
+                  "pr_automation", "release_management"
+                ],
+                "description": "Type of GitHub analysis to perform"
+              },
+              "repo": {
+                "type": "string",
+                "description": "GitHub repository (owner/repo format)"
+              },
+              "pr_number": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Pull request number for PR operations"
+              },
+              "issue_title": {
+                "type": "string",
+                "description": "Title for new GitHub issue"
+              },
+              "issue_body": {
+                "type": "string",
+                "description": "Body content for new GitHub issue"
+              },
+              "labels": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Labels for GitHub issues/PRs"
+              },
+              "assignees": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Assignees for GitHub issues/PRs"
+              },
+              "state": {
+                "type": "string",
+                "enum": ["open", "closed", "all"],
+                "description": "State filter for GitHub issues/PRs"
+              },
+              "tag": {
+                "type": "string",
+                "description": "Git tag or 'latest' for release operations"
               }
             }
           },

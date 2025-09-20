@@ -1,0 +1,269 @@
+"""Bridge between tool integrations and CLI orchestrator adapters."""
+
+from typing import Any, Dict
+
+from .base_adapter import AdapterResult, BaseAdapter
+
+# Import only when needed to avoid circular imports
+
+
+class ToolAdapterBridge(BaseAdapter):
+    """Bridge adapter that connects tool integrations to the orchestrator."""
+
+    def __init__(self, tool_type: str, dry_run: bool = False):
+        super().__init__()
+        self.tool_type = tool_type
+
+        # Import here to avoid circular imports
+        from ...integrations.process import ProcessRunner
+        from ...integrations.registry import load_config
+
+        self.runner = ProcessRunner(dry_run=dry_run)
+        self.config = load_config("config/tool_adapters.yaml")
+
+    def get_actor_name(self) -> str:
+        """Return the actor name for this bridge."""
+        return f"tool_{self.tool_type}"
+
+    def execute(self, task: Dict[str, Any]) -> AdapterResult:
+        """Execute a tool operation through the bridge."""
+        operation = task.get("operation", "version")
+
+        try:
+            if self.tool_type == "vcs":
+                from ...integrations.vcs import create_vcs_adapter
+
+                adapter = create_vcs_adapter(self.runner, self.config.vcs)
+                return self._execute_vcs_operation(adapter, operation, task)
+
+            elif self.tool_type == "containers":
+                from ...integrations.containers import create_containers_adapter
+
+                adapter = create_containers_adapter(self.runner, self.config.containers)
+                return self._execute_containers_operation(adapter, operation, task)
+
+            elif self.tool_type == "editor":
+                from ...integrations.editor import create_editor_adapter
+
+                adapter = create_editor_adapter(self.runner, self.config.editor)
+                return self._execute_editor_operation(adapter, operation, task)
+
+            elif self.tool_type == "js_runtime":
+                from ...integrations.js_runtime import create_js_runtime_adapter
+
+                adapter = create_js_runtime_adapter(self.runner, self.config.js_runtime)
+                return self._execute_js_operation(adapter, operation, task)
+
+            elif self.tool_type == "ai_cli":
+                from ...integrations.ai_cli import create_ai_cli_adapter
+
+                adapter = create_ai_cli_adapter(self.runner, self.config.ai_cli)
+                return self._execute_ai_operation(adapter, operation, task)
+
+            elif self.tool_type == "python_quality":
+                from ...integrations.python_quality import create_python_quality_adapter
+
+                adapter = create_python_quality_adapter(self.runner)
+                return self._execute_quality_operation(adapter, operation, task)
+
+            elif self.tool_type == "precommit":
+                from ...integrations.precommit import create_precommit_adapter
+
+                adapter = create_precommit_adapter(self.runner)
+                return self._execute_precommit_operation(adapter, operation, task)
+
+            else:
+                return AdapterResult(
+                    success=False,
+                    error=f"Unknown tool type: {self.tool_type}",
+                    output="",
+                    artifacts={},
+                )
+
+        except Exception as e:
+            return AdapterResult(success=False, error=str(e), output="", artifacts={})
+
+    def _execute_vcs_operation(
+        self, adapter, operation: str, task: Dict[str, Any]
+    ) -> AdapterResult:
+        """Execute VCS operations."""
+        if operation == "clone":
+            url = task.get("url", "")
+            target_dir = task.get("target_dir", "")
+            result = adapter.clone(url, target_dir)
+        elif operation == "status":
+            cwd = task.get("cwd")
+            result = adapter.status(cwd=cwd)
+        elif operation == "checkout":
+            branch = task.get("branch", "main")
+            cwd = task.get("cwd")
+            result = adapter.checkout(branch, cwd=cwd)
+        elif operation == "fetch":
+            cwd = task.get("cwd")
+            result = adapter.fetch(cwd=cwd)
+        else:
+            result = adapter.version()
+
+        return AdapterResult(
+            success=result.code == 0 if hasattr(result, "code") else result.ok,
+            error=result.stderr if hasattr(result, "stderr") else result.details,
+            output=result.stdout if hasattr(result, "stdout") else str(result.version),
+            artifacts={"command_result": result},
+        )
+
+    def _execute_containers_operation(
+        self, adapter, operation: str, task: Dict[str, Any]
+    ) -> AdapterResult:
+        """Execute container operations."""
+        if operation == "compose_up":
+            compose_file = task.get("compose_file", "docker-compose.yml")
+            detach = task.get("detach", True)
+            result = adapter.compose_up(compose_file=compose_file, detach=detach)
+        elif operation == "compose_down":
+            compose_file = task.get("compose_file", "docker-compose.yml")
+            result = adapter.compose_down(compose_file=compose_file)
+        elif operation == "ps":
+            result = adapter.ps()
+        elif operation == "run":
+            image = task.get("image", "")
+            command = task.get("command")
+            kwargs = task.get("kwargs", {})
+            result = adapter.run(image, command, **kwargs)
+        else:
+            result = adapter.version()
+
+        return AdapterResult(
+            success=result.code == 0 if hasattr(result, "code") else result.ok,
+            error=result.stderr if hasattr(result, "stderr") else result.details,
+            output=result.stdout if hasattr(result, "stdout") else str(result.version),
+            artifacts={"command_result": result},
+        )
+
+    def _execute_editor_operation(
+        self, adapter, operation: str, task: Dict[str, Any]
+    ) -> AdapterResult:
+        """Execute editor operations."""
+        if operation == "open_file":
+            file_path = task.get("file_path", "")
+            result = adapter.open_file(file_path)
+        elif operation == "open_folder":
+            folder_path = task.get("folder_path", "")
+            result = adapter.open_folder(folder_path)
+        elif operation == "install_extension":
+            extension_id = task.get("extension_id", "")
+            result = adapter.install_extension(extension_id)
+        else:
+            result = adapter.version()
+
+        return AdapterResult(
+            success=result.code == 0 if hasattr(result, "code") else result.ok,
+            error=result.stderr if hasattr(result, "stderr") else result.details,
+            output=result.stdout if hasattr(result, "stdout") else str(result.version),
+            artifacts={"command_result": result},
+        )
+
+    def _execute_js_operation(
+        self, adapter, operation: str, task: Dict[str, Any]
+    ) -> AdapterResult:
+        """Execute JavaScript runtime operations."""
+        cwd = task.get("cwd")
+
+        if operation == "npm_install":
+            result = adapter.npm_install(cwd=cwd)
+        elif operation == "npm_run":
+            script = task.get("script", "")
+            result = adapter.npm_run(script, cwd=cwd)
+        elif operation == "npx_run":
+            package = task.get("package", "")
+            args = task.get("args")
+            result = adapter.npx_run(package, args=args, cwd=cwd)
+        else:
+            result = adapter.version()
+
+        return AdapterResult(
+            success=result.code == 0 if hasattr(result, "code") else result.ok,
+            error=result.stderr if hasattr(result, "stderr") else result.details,
+            output=result.stdout if hasattr(result, "stdout") else str(result.version),
+            artifacts={"command_result": result},
+        )
+
+    def _execute_ai_operation(
+        self, adapter, operation: str, task: Dict[str, Any]
+    ) -> AdapterResult:
+        """Execute AI CLI operations."""
+        cwd = task.get("cwd")
+
+        if operation == "run_command":
+            args = task.get("args", [])
+            result = adapter.run_command(args, cwd=cwd)
+        else:
+            result = adapter.version()
+
+        return AdapterResult(
+            success=result.code == 0 if hasattr(result, "code") else result.ok,
+            error=result.stderr if hasattr(result, "stderr") else result.details,
+            output=result.stdout if hasattr(result, "stdout") else str(result.version),
+            artifacts={"command_result": result},
+        )
+
+    def _execute_quality_operation(
+        self, adapter, operation: str, task: Dict[str, Any]
+    ) -> AdapterResult:
+        """Execute Python quality operations."""
+        if operation == "ruff_check":
+            paths = task.get("paths")
+            fix = task.get("fix", False)
+            result = adapter.ruff_check(paths=paths, fix=fix)
+        elif operation == "mypy_check":
+            targets = task.get("targets")
+            result = adapter.mypy_check(targets=targets)
+        elif operation == "bandit_scan":
+            target = task.get("target", "src")
+            result = adapter.bandit_scan(target=target)
+        elif operation == "semgrep_scan":
+            target = task.get("target", ".")
+            result = adapter.semgrep_scan(target=target)
+        elif operation == "run_all":
+            fix = task.get("fix", False)
+            paths = task.get("paths")
+            results = adapter.run_all(fix=fix, paths=paths)
+
+            # Aggregate results
+            all_success = all(r.code == 0 for r in results.values())
+            summary = adapter.generate_summary(results)
+
+            return AdapterResult(
+                success=all_success,
+                error="" if all_success else "Some quality checks failed",
+                output=summary,
+                artifacts={"quality_results": results},
+            )
+        else:
+            result = adapter.version()
+
+        return AdapterResult(
+            success=result.code == 0 if hasattr(result, "code") else result.ok,
+            error=result.stderr if hasattr(result, "stderr") else result.details,
+            output=result.stdout if hasattr(result, "stdout") else str(result.version),
+            artifacts={"command_result": result},
+        )
+
+    def _execute_precommit_operation(
+        self, adapter, operation: str, task: Dict[str, Any]
+    ) -> AdapterResult:
+        """Execute pre-commit operations."""
+        if operation == "install":
+            result = adapter.install()
+        elif operation == "run_all":
+            result = adapter.run_all()
+        elif operation == "autoupdate":
+            result = adapter.autoupdate()
+        else:
+            result = adapter.version()
+
+        return AdapterResult(
+            success=result.code == 0 if hasattr(result, "code") else result.ok,
+            error=result.stderr if hasattr(result, "stderr") else result.details,
+            output=result.stdout if hasattr(result, "stdout") else str(result.version),
+            artifacts={"command_result": result},
+        )

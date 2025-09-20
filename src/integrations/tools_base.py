@@ -1,0 +1,178 @@
+"""Base protocols and types for tool adapters."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional, Protocol, runtime_checkable
+
+from .process import CommandResult
+
+
+@dataclass
+class ToolProbe:
+    """Information about a detected tool."""
+
+    name: str
+    path: Optional[str]
+    version: Optional[str]
+    ok: bool
+    details: Optional[str] = None
+
+
+@runtime_checkable
+class VCS(Protocol):
+    """Version Control System interface."""
+
+    def version(self) -> ToolProbe:
+        """Get version information for the VCS tool."""
+        ...
+
+    def clone(self, url: str, target_dir: str) -> CommandResult:
+        """Clone a repository."""
+        ...
+
+    def status(self, cwd: Optional[str] = None) -> CommandResult:
+        """Get repository status."""
+        ...
+
+    def checkout(self, branch: str, cwd: Optional[str] = None) -> CommandResult:
+        """Checkout a branch."""
+        ...
+
+    def fetch(self, cwd: Optional[str] = None) -> CommandResult:
+        """Fetch from remote."""
+        ...
+
+
+@runtime_checkable
+class Containers(Protocol):
+    """Container management interface."""
+
+    def version(self) -> ToolProbe:
+        """Get version information for the container tool."""
+        ...
+
+    def compose_up(
+        self, compose_file: str = "docker-compose.yml", detach: bool = True
+    ) -> CommandResult:
+        """Start containers with docker-compose."""
+        ...
+
+    def compose_down(self, compose_file: str = "docker-compose.yml") -> CommandResult:
+        """Stop containers with docker-compose."""
+        ...
+
+    def ps(self) -> CommandResult:
+        """List running containers."""
+        ...
+
+    def run(
+        self, image: str, command: Optional[List[str]] = None, **kwargs
+    ) -> CommandResult:
+        """Run a container."""
+        ...
+
+
+@runtime_checkable
+class Editor(Protocol):
+    """Code editor interface."""
+
+    def version(self) -> ToolProbe:
+        """Get version information for the editor."""
+        ...
+
+    def open_file(self, file_path: str) -> CommandResult:
+        """Open a file in the editor."""
+        ...
+
+    def open_folder(self, folder_path: str) -> CommandResult:
+        """Open a folder in the editor."""
+        ...
+
+    def install_extension(self, extension_id: str) -> CommandResult:
+        """Install an editor extension."""
+        ...
+
+
+@runtime_checkable
+class JSRuntime(Protocol):
+    """JavaScript runtime interface."""
+
+    def version(self) -> ToolProbe:
+        """Get version information for the JS runtime."""
+        ...
+
+    def npm_install(self, cwd: Optional[str] = None) -> CommandResult:
+        """Run npm install."""
+        ...
+
+    def npm_run(self, script: str, cwd: Optional[str] = None) -> CommandResult:
+        """Run an npm script."""
+        ...
+
+    def npx_run(
+        self, package: str, args: Optional[List[str]] = None, cwd: Optional[str] = None
+    ) -> CommandResult:
+        """Run a package with npx."""
+        ...
+
+
+@runtime_checkable
+class AICLI(Protocol):
+    """AI CLI interface."""
+
+    def version(self) -> ToolProbe:
+        """Get version information for the AI CLI."""
+        ...
+
+    def run_command(self, args: List[str], cwd: Optional[str] = None) -> CommandResult:
+        """Run an AI CLI command."""
+        ...
+
+
+@runtime_checkable
+class PythonQuality(Protocol):
+    """Python code quality tools interface."""
+
+    def version(self) -> ToolProbe:
+        """Get version information for the quality tool."""
+        ...
+
+    def ruff_check(
+        self, paths: Optional[List[str]] = None, fix: bool = False
+    ) -> CommandResult:
+        """Run ruff linting."""
+        ...
+
+    def mypy_check(self, targets: Optional[List[str]] = None) -> CommandResult:
+        """Run mypy type checking."""
+        ...
+
+    def bandit_scan(self, target: str = "src") -> CommandResult:
+        """Run bandit security scan."""
+        ...
+
+    def semgrep_scan(self, target: str = ".") -> CommandResult:
+        """Run semgrep static analysis."""
+        ...
+
+
+@runtime_checkable
+class PreCommit(Protocol):
+    """Pre-commit hooks interface."""
+
+    def version(self) -> ToolProbe:
+        """Get version information for pre-commit."""
+        ...
+
+    def install(self) -> CommandResult:
+        """Install pre-commit hooks."""
+        ...
+
+    def run_all(self) -> CommandResult:
+        """Run all pre-commit hooks."""
+        ...
+
+    def autoupdate(self) -> CommandResult:
+        """Update pre-commit hook versions."""
+        ...

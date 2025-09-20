@@ -1,0 +1,71 @@
+﻿name: AI Edit Pipeline (Plan-Aware)
+version: "1.1.0"
+
+inputs:
+  files: ["src/**/*.py"]
+  requirements: "Fix authentication bugs and improve type safety"
+  lane: "lane/ai-edits/auth-fix"
+
+policy:
+  max_tokens: 50000
+  prefer_deterministic: true
+  validation_required: true
+  backup_before_edit: true
+
+steps:
+  - id: plan
+    name: AI Planning (High-cost)
+    actor: ai_planner
+    with:
+      prompt_template: "ai_prompt_template.md"
+      output_path: "artifacts/edit_plan.json"
+    emits: ["artifacts/edit_plan.json"]
+
+  - id: validate
+    name: Contract + Rules Validation
+    actor: python
+    depends_on: ["plan"]
+    with:
+      cmd: "python tools/edit_validator_v2.py artifacts/edit_plan.json"
+    emits: ["artifacts/validation_report.json"]
+    gates:
+      - type: command_exit_zero
+        description: "Validator must exit 0"
+      - type: artifact_exists
+        artifact: "artifacts/validation_report.json"
+
+  - id: backup
+    name: Create Git Snapshot
+    actor: shell
+    depends_on: ["validate"]
+    with:
+      run: |
+        git add -A
+        git commit -m "backup: pre-AI-edit snapshot" || true
+        git tag -f ai-edit-pre || true
+
+  - id: apply
+    name: Apply Edits (Deterministic)
+    actor: python
+    depends_on: ["backup"]
+    with:
+      cmd: "python tools/apply_edits.py artifacts/edit_plan.json"
+    emits: ["artifacts/apply_report.json"]
+
+  - id: postcheck
+    name: Lint + Tests
+    actor: shell
+    depends_on: ["apply"]
+    with:
+      run: |
+        ruff check . || true
+        pytest -q || true
+
+  - id: commit
+    name: Commit with Signatures
+    actor: shell
+    depends_on: ["postcheck"]
+    with:
+      run: |
+        git add -A
+        git commit -m "ai-edit: apply plan with signatures" || true

@@ -1,0 +1,21 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "apf.io.request.v1.schema.json",
+  "title": "APF IO Request v1",
+  "type": "object",
+  "required": ["version", "id", "task", "intent", "inputs"],
+  "properties": {
+    "version": {"const": "io.v1"},
+    "id": {"type": "string"},
+    "timestamp": {"type": "string"},
+    "task": {"type": "string", "description": "High-level task type, e.g., lint|test|edit|plan|deploy|custom"},
+    "intent": {"type": "string", "description": "generate|transform|analyze|validate|execute"},
+    "inputs": {"type": "object", "additionalProperties": true},
+    "artifacts": {"type": "array", "items": {"type": "object", "required": ["name","type"], "properties": {"name": {"type": "string"}, "path": {"type": "string"}, "type": {"enum":["file","dir","url","inline"]}, "role": {"enum":["primary","secondary","log","tmp"], "default": "secondary"}, "mime": {"type": "string"}}}},
+    "context": {"type": "object", "properties": {"repo": {"type":"string"}, "branch": {"type":"string"}, "commit": {"type":"string"}, "env": {"type": "object", "additionalProperties": {"type": ["string","number","boolean"]}}}},
+    "constraints": {"type": "object", "properties": {"timeout_s": {"type":"integer","minimum":1}, "budget_tokens": {"type":"integer","minimum":0}, "read_only": {"type":"boolean"}, "dry_run": {"type":"boolean"}}},
+    "expect": {"type": "object", "properties": {"schema": {"type":"string"}, "outputs": {"type":"array","items": {"type":"string"}}, "stream": {"enum":["events","none"], "default":"events"}}},
+    "notify": {"type":"object", "properties": {"events": {"type":"array","items":{"enum":["progress","metric","artifact","error","debug"]}}, "level": {"enum":["debug","info","warn","error"], "default":"info"}}}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitHub Issue Triage Analysis Schema",
+  "description": "Schema for validating GitHub issue triage analysis artifacts",
+  "type": "object",
+  "required": ["timestamp", "analysis_type", "success", "data"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Analysis timestamp in ISO format"
+    },
+    "analysis_type": {
+      "type": "string",
+      "const": "issue_triage",
+      "description": "Analysis type identifier"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether the analysis completed successfully"
+    },
+    "data": {
+      "type": "object",
+      "required": ["repo", "timestamp", "issues"],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "Repository identifier (owner/repo)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["number", "title", "category", "priority"],
+            "properties": {
+              "number": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "GitHub issue number"
+              },
+              "title": {
+                "type": "string",
+                "description": "Issue title"
+              },
+              "category": {
+                "type": "string",
+                "enum": ["bug", "enhancement", "question", "general"],
+                "description": "Automatically categorized issue type"
+              },
+              "priority": {
+                "type": "string",
+                "enum": ["critical", "high", "medium", "low"],
+                "description": "Automatically assigned priority"
+              },
+              "labels": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Current issue labels"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Issue creation timestamp"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Issue last update timestamp"
+              },
+              "comments": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of comments on the issue"
+              },
+              "assignees": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Issue assignees"
+              }
+            }
+          }
+        },
+        "categorization": {
+          "type": "object",
+          "description": "Issue categorization summary",
+          "properties": {
+            "by_category": {
+              "type": "object",
+              "patternProperties": {
+                ".*": {"type": "integer", "minimum": 0}
+              }
+            },
+            "by_priority": {
+              "type": "object",
+              "patternProperties": {
+                ".*": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        },
+        "priority_suggestions": {
+          "type": "object",
+          "description": "Priority assignment suggestions",
+          "properties": {
+            "critical_issues": {
+              "type": "array",
+              "items": {"type": "integer"},
+              "description": "Issue numbers marked as critical"
+            },
+            "stale_issues": {
+              "type": "array",
+              "items": {"type": "integer"},
+              "description": "Issue numbers that are stale"
+            }
+          }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Issue triage recommendations"
+    },
+    "issues_found": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Issues identified during triage analysis"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "adapter": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    }
+  }
+}

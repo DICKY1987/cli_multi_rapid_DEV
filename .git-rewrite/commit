@@ -1,0 +1,38 @@
+tree 9a395827eb6b0d5ed380c61c1e9886664a92af0b
+parent 697f7cb4d8b9fce4019a62c0d216940e317d29fa
+author dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com> 1757607867 +0000
+committer GitHub <noreply@github.com> 1757607867 +0000
+gpgsig -----BEGIN PGP SIGNATURE-----
+
+ wsFcBAABCAAQBQJowve7CRC1aQ7uu5UhlAAAjOQQAINMOdxdehxWRax0lhChRa9H
+ QdYEicjs5S2s5mn43n6ewd9BQVy4U44QaSZa5B/oA6PH/mEgRDdPS09OrFopQo5L
+ L1AdJffrPyhmCTfxKpSXiiDVURpzZ8xpXxx/e6JcrDr2OOhxRaOLcbDqkGXF5RlG
+ vEplC/WeolV/DuewhRCHyoBsYuptBA42TyIe5k+0iTLQctahdmoBfwy1ocnEqlEd
+ LbBqqGY+knHyTMxqoD/Ve9edtfQWwzMGE32WEe08ye8FIqfX2o0yd1lz+SFVx/uX
+ 4ua3L3V3M27v63H8A7sv2vFYC7z6EdjnfdgljceQczQaeiaGlZvpSv1lxs3IwSBo
+ IHbEOdm5aa+A1Di5BP/CumhbEahhNv+K8rFyUdvZB0OwhMd+gumGP7WzKD0nHg21
+ uU1uSWqFgYgnXD1PBMPqeAZb6ZShTVO7poaXfPlB0w9K1AOa/ijsakKn6pyf/fpG
+ bch9kxOtDxQ6rmDjrdvHg5PPGarbNLemObRYLJIAybL8BT53jougWlRg0DqNnDdz
+ pOIV6V1PUnUiSuwIGGeJOWD4dcRkX7eq/0mzgfPVPrKxCYj69HFHbIcTPrHZ20nc
+ jFjvZdDEwQ0G7SPjT3dE1Nq9KIn93OeFVKslyTnTbSV4OwNV3ybV89igAf1yMj5V
+ AboyIXrKpBUXcnsIDW2D
+ =BjHk
+ -----END PGP SIGNATURE-----
+
+
+Bump actions/checkout from 4 to 5
+
+Bumps [actions/checkout](https://github.com/actions/checkout) from 4 to 5.
+- [Release notes](https://github.com/actions/checkout/releases)
+- [Changelog](https://github.com/actions/checkout/blob/main/CHANGELOG.md)
+- [Commits](https://github.com/actions/checkout/compare/v4...v5)
+
+---
+updated-dependencies:
+- dependency-name: actions/checkout
+  dependency-version: '5'
+  dependency-type: direct:production
+  update-type: version-update:semver-major
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
