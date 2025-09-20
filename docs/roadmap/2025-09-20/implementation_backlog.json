@@ -1,0 +1,86 @@
+{
+  "schema": "task_backlog_v3",
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "Create CI matrix (Python/TS/MQL4) with quality gates",
+      "phase": "A",
+      "priority": "Critical",
+      "effort_estimate": {"story_points": 8, "hours": 10, "confidence": 0.7},
+      "dependencies": [],
+      "acceptance_criteria": [
+        "On PR, jobs lint/type/unit/secscan/build all pass",
+        "`task ci` mirrors CI locally and exits 0",
+        "Artifacts uploaded and coverage reported"
+      ],
+      "assignee_profile": {"skills": ["GitHub Actions", "Python", "TypeScript"], "level": "Senior"},
+      "related_findings": ["workflows/** present; tests scaffold; multi-lang repo"],
+      "validation_steps": ["push test branch; verify all jobs succeed; badge turns green"]
+    },
+    {
+      "id": "T-002",
+      "title": "Pin dependencies and standardize environment",
+      "phase": "A",
+      "priority": "High",
+      "effort_estimate": {"story_points": 5, "hours": 6, "confidence": 0.8},
+      "dependencies": ["T-001"],
+      "acceptance_criteria": [
+        "Python deps resolved via `uv` or `pip-tools` with lock file",
+        "Node deps pinned with lockfile",
+        "`.env.template` documented; `make dotenv` or `task dotenv` creates local .env"
+      ],
+      "assignee_profile": {"skills": ["Python packaging", "Node.js"], "level": "Mid+"},
+      "related_findings": ["pyproject.toml, requirements.txt, .env.template present"],
+      "validation_steps": ["fresh clone builds deterministically"]
+    },
+    {
+      "id": "T-003",
+      "title": "Compose-based smoke test and healthchecks",
+      "phase": "A",
+      "priority": "High",
+      "effort_estimate": {"story_points": 5, "hours": 6, "confidence": 0.75},
+      "dependencies": ["T-002"],
+      "acceptance_criteria": [
+        "`docker compose up -d` runs without errors",
+        "Service `/healthz` returns 200 in <2s",
+        "Synthetic job exercises main CLI flow end-to-end"
+      ],
+      "assignee_profile": {"skills": ["Docker", "Python"], "level": "Mid"},
+      "related_findings": ["docker-compose.yml present"],
+      "validation_steps": ["CI e2e job green; runbook updated"]
+    },
+    {
+      "id": "T-004",
+      "title": "Integration tests & contracts across CLI/GUI/VS Code",
+      "phase": "B",
+      "priority": "Critical",
+      "effort_estimate": {"story_points": 13, "hours": 14, "confidence": 0.6},
+      "dependencies": ["T-003"],
+      "acceptance_criteria": [
+        "Contract tests cover the shared invocation surface",
+        "VS Code extension scenario passes against local services",
+        "Coverage on critical paths ≥ 90%"
+      ],
+      "assignee_profile": {"skills": ["PyTest", "Playwright", "VS Code APIs"], "level": "Senior"},
+      "related_findings": ["vscode-extension/**; CLI_PY_GUI/** present"],
+      "validation_steps": ["CI integration suite passes; reports stored"]
+    },
+    {
+      "id": "T-005",
+      "title": "K8s manifests with rollout/rollback and observability",
+      "phase": "C",
+      "priority": "High",
+      "effort_estimate": {"story_points": 8, "hours": 12, "confidence": 0.7},
+      "dependencies": ["T-004"],
+      "acceptance_criteria": [
+        "Staging deploy via GitHub Actions",
+        "Rollback tested successfully",
+        "Grafana dashboards show live metrics/logs"
+      ],
+      "assignee_profile": {"skills": ["Kubernetes", "GitHub Actions", "Grafana"], "level": "Senior"},
+      "related_findings": ["deploy/k8s/**, dashboards/grafana/** present"],
+      "validation_steps": ["canary deployed; SLOs met in load test"]
+    }
+  ]
+}
+
