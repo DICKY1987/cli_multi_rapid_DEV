@@ -116,3 +116,10 @@ python_gpt_knowledge/
 src/eafix/
 yamlconvert/
 CODEX_WORKSPACE/
+
+# Embedded git repositories (to be cleaned up)
+cli_multi_rapid_DEV/
+cli_multi_rapid_DEV_branchupdate/
+cli_multi_rapid_DEV-clean/
+temp_repo_analysis/
+combined_repo_plan.composed.json
