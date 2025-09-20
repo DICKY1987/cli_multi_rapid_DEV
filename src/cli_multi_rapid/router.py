@@ -11,6 +11,14 @@ from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 
+from .adapters import AdapterRegistry
+from .adapters.ai_analyst import AIAnalystAdapter
+from .adapters.ai_editor import AIEditorAdapter
+from .adapters.code_fixers import CodeFixersAdapter
+from .adapters.pytest_runner import PytestRunnerAdapter
+from .adapters.vscode_diagnostics import VSCodeDiagnosticsAdapter
+from .adapters.cost_estimator import CostEstimatorAdapter
+
 console = Console()
 
 
@@ -29,50 +37,28 @@ class Router:
 
     def __init__(self):
         self.console = Console()
-        self.adapters = self._initialize_adapters()
+        self.registry = AdapterRegistry()
+        self._initialize_adapters()
+        self.adapters = self.registry.get_available_adapters()
 
-    def _initialize_adapters(self) -> Dict[str, Any]:
-        """Initialize available adapters."""
-        return {
-            # Deterministic tool adapters
-            "vscode_diagnostics": {
-                "type": "deterministic",
-                "description": "Run VS Code diagnostic analysis",
-                "cost": 0,
-                "available": True,
-            },
-            "code_fixers": {
-                "type": "deterministic",
-                "description": "Apply automated code fixes",
-                "cost": 0,
-                "available": True,
-            },
-            "pytest_runner": {
-                "type": "deterministic",
-                "description": "Execute Python tests",
-                "cost": 0,
-                "available": True,
-            },
-            "verifier": {
-                "type": "deterministic",
-                "description": "Validate artifacts and gates",
-                "cost": 0,
-                "available": True,
-            },
-            "git_ops": {
-                "type": "deterministic",
-                "description": "Git operations and PR creation",
-                "cost": 0,
-                "available": True,
-            },
-            # AI-powered adapters
-            "ai_editor": {
-                "type": "ai",
-                "description": "AI-powered code editing",
-                "cost": 1000,  # Estimated tokens
-                "available": True,
-            },
-        }
+    def _initialize_adapters(self) -> None:
+        """Initialize available adapters in the registry."""
+        # Register deterministic adapters
+        self.registry.register(CodeFixersAdapter())
+        self.registry.register(PytestRunnerAdapter())
+        self.registry.register(VSCodeDiagnosticsAdapter())
+        from .adapters.git_ops import GitOpsAdapter
+        self.registry.register(GitOpsAdapter())
+
+        # Register AI-powered adapters
+        self.registry.register(AIEditorAdapter())
+        self.registry.register(AIAnalystAdapter())
+
+        # TODO: Register additional adapters:
+        # - verifier (quality gates)
+        # - git_ops (PR creation)
+
+        self.console.print(f"[dim]Initialized {len(self.registry.list_adapters())} adapters[/dim]")
 
     def route_step(
         self, step: Dict[str, Any], policy: Optional[Dict[str, Any]] = None
@@ -82,25 +68,17 @@ class Router:
         actor = step.get("actor", "unknown")
         step_name = step.get("name", "Unnamed step")
 
-        # Check if actor is available
-        if actor not in self.adapters:
-            return RoutingDecision(
-                adapter_name="fallback",
-                adapter_type="ai",
-                reasoning=f"Unknown actor '{actor}' - fallback to AI",
-                estimated_tokens=500,
-            )
-
-        adapter_info = self.adapters[actor]
-
-        # Check availability
-        if not adapter_info.get("available", False):
+        # Check if actor is available in registry
+        if not self.registry.is_available(actor):
             return RoutingDecision(
                 adapter_name="fallback",
                 adapter_type="ai",
                 reasoning=f"Actor '{actor}' not available - fallback to AI",
                 estimated_tokens=500,
             )
+
+        # Get adapter metadata
+        adapter_info = self.adapters.get(actor, {})
 
         # Apply routing policy
         prefer_deterministic = True
@@ -119,7 +97,7 @@ class Router:
             if prefer_deterministic:
                 # Check if there's a deterministic alternative
                 alt_adapter = self._find_deterministic_alternative(actor)
-                if alt_adapter:
+                if alt_adapter and self.registry.is_available(alt_adapter):
                     return RoutingDecision(
                         adapter_name=alt_adapter,
                         adapter_type="deterministic",
@@ -143,40 +121,3 @@ class Router:
         )
 
     def _find_deterministic_alternative(self, ai_actor: str) -> Optional[str]:
-        """Find a deterministic alternative for an AI actor."""
-        alternatives = {
-            "ai_editor": "code_fixers",  # For simple fixes, prefer automated tools
-        }
-        return alternatives.get(ai_actor)
-
-    def get_available_actors(self) -> List[str]:
-        """Get list of all available actors."""
-        return [
-            name for name, info in self.adapters.items() if info.get("available", False)
-        ]
-
-    def estimate_workflow_cost(self, workflow: Dict[str, Any]) -> Dict[str, Any]:
-        """Estimate the total cost of executing a workflow."""
-        steps = workflow.get("steps", [])
-        policy = workflow.get("policy", {})
-
-        total_tokens = 0
-        deterministic_steps = 0
-        ai_steps = 0
-
-        for step in steps:
-            decision = self.route_step(step, policy)
-            total_tokens += decision.estimated_tokens
-
-            if decision.adapter_type == "deterministic":
-                deterministic_steps += 1
-            else:
-                ai_steps += 1
-
-        return {
-            "total_estimated_tokens": total_tokens,
-            "deterministic_steps": deterministic_steps,
-            "ai_steps": ai_steps,
-            "estimated_cost_usd": total_tokens * 0.00001,  # Rough estimate
-            "routing_decisions": len(steps),
-        }
