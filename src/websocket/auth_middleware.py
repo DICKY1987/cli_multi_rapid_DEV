@@ -2,9 +2,26 @@
 
 import logging
 from typing import Optional, Dict, Any
-from fastapi import HTTPException, status
-import jwt
-import redis
+try:
+    from fastapi import HTTPException, status  # type: ignore
+except Exception:  # pragma: no cover - fallback when fastapi missing
+    class HTTPException(Exception):  # type: ignore
+        pass
+
+    class _status:  # type: ignore
+        HTTP_401_UNAUTHORIZED = 401
+
+    status = _status()  # type: ignore
+
+try:
+    import jwt  # type: ignore
+except Exception:  # pragma: no cover - allow operation without jwt module
+    jwt = None  # type: ignore
+
+try:
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - allow operation without redis module
+    redis = None  # type: ignore
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
