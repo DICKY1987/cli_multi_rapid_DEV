@@ -46,8 +46,11 @@ def get_total_cost(task_id: str) -> float:
 
 
 def record_gdw_cost(workflow_id: str, step_id: str | None, amount: float) -> None:
+    """Record cost for a GDW workflow or step.
 
-    Uses a synthetic task_id namespace "gdw:<workflow_id>" and action "gdw_step".
+    Uses a synthetic task_id namespace "gdw:<workflow_id>" and action
+    "gdw_step" when a step id is provided; otherwise records against the
+    workflow as a whole.
     """
     tid = f"gdw:{workflow_id}"
     action = "gdw_step" if step_id else "gdw"

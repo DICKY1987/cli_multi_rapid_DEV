@@ -7,7 +7,10 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
-import redis
+try:
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - allow operation without redis module
+    redis = None  # type: ignore
 
 from .connection_manager import connection_manager, get_active_connection_manager
 

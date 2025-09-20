@@ -266,6 +266,32 @@ phases:
     rules_in: policy/compliance_rules.json
   - type: runbook
     path: docs/runbooks/emergency_recovery.md
+ 
+- id: phase_validate_fixes
+  title: Validate local fixes via tests
+  goals:
+  - Ensure cost tracker, gdw runner, and websocket import are healthy
+  acceptance:
+  - Validation tests pass locally
+  actions:
+  - type: tests
+    suite: validations
+    paths:
+    - tests/validations
+    - --cov-fail-under=0
+
+- id: phase_tests_extended_smoke
+  title: Extended tests smoke (Ubuntu parity)
+  goals:
+  - Run broader set of tests locally to assess fixes
+  acceptance:
+  - Pytest returns success on extended selection
+  actions:
+  - type: tests
+    suite: extended_smoke
+    paths:
+    - tests
+    - --ignore=tests/benchmarks
 - id: phase6
   title: Release v0.1.0
   goals:
