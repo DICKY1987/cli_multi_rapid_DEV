@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CLI Tool Selection Schema",
+  "type": "object",
+  "properties": {
+    "vcs": {"type": "string", "enum": ["git"]},
+    "containers": {"type": "string", "enum": ["docker"]},
+    "editor": {"type": "string", "enum": ["vscode"]},
+    "js_runtime": {"type": "string", "enum": ["node"]},
+    "ai_cli": {"type": "string", "enum": ["openai", "claude"]},
+    "python_quality": {
+      "type": "object",
+      "properties": {
+        "ruff": {"type": "boolean"},
+        "mypy": {"type": "boolean"},
+        "bandit": {"type": "boolean"},
+        "semgrep": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "precommit": {"type": "boolean"},
+    "paths": {
+      "type": "object",
+      "properties": {
+        "git": {"type": "string"},
+        "gh": {"type": "string"},
+        "docker": {"type": "string"},
+        "code": {"type": "string"},
+        "node": {"type": "string"},
+        "npx": {"type": "string"},
+        "openai": {"type": "string"},
+        "claude": {"type": "string"},
+        "pre_commit": {"type": "string"},
+        "ruff": {"type": "string"},
+        "mypy": {"type": "string"},
+        "bandit": {"type": "string"},
+        "semgrep": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+
