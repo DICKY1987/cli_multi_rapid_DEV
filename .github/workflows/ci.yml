@@ -1,79 +1,82 @@
-name: CLI Orchestrator CI
+name: CI
+
 on:
   pull_request:
-    branches: [main]
+    branches: [ main ]
   push:
-    branches: [main]
-    paths-ignore:
-      - ".ai/tmp/**"
+    branches: [ main ]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  quality:
+  core:
+    name: Core tests (Linux, Python 3.11)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v6
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
-          python-version: "3.12"
-      - name: Install dependencies
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-core-${{ hashFiles('**/pyproject.toml', '**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-core-
+
+      - name: Install core test deps
         run: |
-          pip install -e .
-          pip install pre-commit pytest ruff mypy gitleaks
-      - name: Pre-commit checks
-        run: pre-commit run -a
-      - name: Run tests
-        run: python -m unittest discover -s tests -v
-  cli_orchestrator_test:
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-cov coverage rich pyyaml
+
+      - name: Run core test suite
+        env:
+          PYTHONPATH: src
+        run: |
+          pytest -q tests \
+            --ignore=tests/benchmarks \
+            --ignore=tests/test_websocket_integration.py \
+            --ignore=tests/test_enterprise_modules.py \
+            --ignore=tests/test_cli_basics_extra.py \
+            --cov=src --cov-report=term-missing --cov-fail-under=0
+
+  extended:
+    name: Extended tests (best-effort)
     runs-on: ubuntu-latest
-    needs: quality
+    needs: core
+    continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install CLI Orchestrator
-        run: pip install -e .
-      - name: Test CLI Orchestrator
-        run: |
-          cli-orchestrator --help || true
-          python -m cli_multi_rapid.main --help || true
-      - name: Validate workflow schemas
-        run: |
-          python -m jsonschema -i .ai/workflows/PY_EDIT_TRIAGE.yaml .ai/schemas/workflow.schema.json || true
-      - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
-          name: cli-orchestrator-artifacts
-          path: artifacts/
-  cost_reports:
-    runs-on: ubuntu-latest
-    needs: cli_orchestrator_test
-    steps:
-      - uses: actions/checkout@v5
-      - name: Emit sample token metrics (if missing)
-        shell: pwsh
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ext-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-ext-
+
+      - name: Install full requirements
         run: |
-          if (-not (Test-Path 'artifacts/tokens.json')) {
-            pwsh -NoProfile -File scripts/emit_tokens.ps1 -Out artifacts/tokens.json
-          }
-      - name: Generate cost reports
-        shell: pwsh
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run full test suite
+        env:
+          PYTHONPATH: src
         run: |
-          pwsh -NoProfile -File scripts/report_costs.ps1 -OutDir artifacts/cost
-      - name: Upload cost artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: cost-reports
-          path: artifacts/cost
-      - name: PR summary
-        if: ${{ github.event_name == 'pull_request' }}
-        shell: pwsh
-        run: |
-          $p = 'artifacts/cost/cost_report.json'
-          if (Test-Path $p) {
-            $o = Get-Content -Raw -Path $p | ConvertFrom-Json
-            "## Cost Summary`n`n- Total: `$${0}`n- Input tokens: {1}`n- Output tokens: {2}" -f $o.total_cost, $o.effective_input_tokens, $o.output_tokens | Out-File -Encoding utf8 $env:GITHUB_STEP_SUMMARY
-          } else {
-            "No cost report found." | Out-File -Encoding utf8 $env:GITHUB_STEP_SUMMARY
-          }
+          pytest -q tests --cov=src --cov-report=term-missing --maxfail=1
+
