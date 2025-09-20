@@ -1,6 +1,89 @@
 {
-  "name": "cli-multi-rapid",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11",
-  "features": {},
-  "postCreateCommand": "pip install -U pip && pip install pre-commit && pip install poetry"
+  "name": "CLI Orchestrator Development",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "cli-orchestrator",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+
+  // Features to add to the dev container
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  // Configure tool-specific properties
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.formatting.provider": "black",
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true,
+        "python.linting.mypyEnabled": true,
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestPath": "/usr/local/bin/pytest",
+        "files.watcherExclude": {
+          "**/.git/**": true,
+          "**/artifacts/**": true,
+          "**/logs/**": true,
+          "**/__pycache__/**": true
+        },
+        "python.envFile": "${workspaceFolder}/.env",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+
+      "extensions": [
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "charliermarsh.ruff",
+        "ms-python.mypy-type-checker",
+        "ms-toolsai.jupyter",
+        "redhat.vscode-yaml",
+        "ms-vscode.vscode-json",
+        "GitHub.copilot",
+        "GitHub.vscode-pull-request-github",
+        "ms-vscode.test-adapter-converter",
+        "littlefoxteam.vscode-python-test-adapter",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally
+  "forwardPorts": [8000, 6379],
+  "portsAttributes": {
+    "8000": {
+      "label": "CLI Orchestrator API",
+      "onAutoForward": "notify"
+    },
+    "6379": {
+      "label": "Redis",
+      "onAutoForward": "silent"
+    }
+  },
+
+  // Environment variables
+  "containerEnv": {
+    "PYTHONPATH": "/app/src",
+    "CLI_ORCHESTRATOR_ENV": "development"
+  },
+
+  // Run commands after the container is created
+  "postCreateCommand": "pip install -e . && mkdir -p artifacts logs cost",
+
+  // Run commands every time the container starts
+  "postStartCommand": "echo 'CLI Orchestrator development environment ready!'",
+
+  // Mount the Docker socket for Docker-in-Docker scenarios
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+
+  // Set the default user
+  "remoteUser": "orchestrator",
+
+  // Configure git inside container
+  "initializeCommand": "git config --global --add safe.directory /app"
 }

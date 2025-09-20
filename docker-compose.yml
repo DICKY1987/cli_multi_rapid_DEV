@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # CLI Orchestrator Main Service
+  cli-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: cli-orchestrator-dev
+    restart: unless-stopped
+    volumes:
+      # Source code for hot reload during development
+      - ./src:/app/src:ro
+      - ./.ai:/app/.ai:ro
+      # Persistent data volumes
+      - cli_artifacts:/app/artifacts
+      - cli_logs:/app/logs
+      - cli_cost:/app/cost
+      # Git configuration for operations
+      - ./.git:/app/.git:ro
+    environment:
+      - CLI_ORCHESTRATOR_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - PYTHONPATH=/app/src
+      # AI Service API Keys (override in .env file)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cli-network
+    ports:
+      - "8000:8000"  # For potential API mode
+    healthcheck:
+      test: ["CMD", "cli-orchestrator", "--help"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for Caching and Session State
+  redis:
+    image: redis:7-alpine
+    container_name: cli-orchestrator-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - cli-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Production CLI Orchestrator (separate service)
+  cli-orchestrator-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: cli-orchestrator-prod
+    restart: unless-stopped
+    volumes:
+      - cli_artifacts:/app/artifacts
+      - cli_logs:/app/logs
+      - cli_cost:/app/cost
+    environment:
+      - CLI_ORCHESTRATOR_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - PYTHONPATH=/app/src
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cli-network
+    profiles:
+      - production
+    healthcheck:
+      test: ["CMD", "cli-orchestrator", "--help"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Testing Environment
+  cli-orchestrator-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    container_name: cli-orchestrator-test
+    volumes:
+      - ./tests:/app/tests:ro
+      - ./src:/app/src:ro
+      - ./.ai:/app/.ai:ro
+    environment:
+      - CLI_ORCHESTRATOR_ENV=testing
+      - PYTHONPATH=/app/src
+    networks:
+      - cli-network
+    profiles:
+      - testing
+    command: ["python", "-m", "pytest", "tests/", "-v", "--cov=src", "--cov-report=html:/app/artifacts/coverage"]
+
+# Persistent Volumes
+volumes:
+  cli_artifacts:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/artifacts
+      o: bind
+  cli_logs:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/logs
+      o: bind
+  cli_cost:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/cost
+      o: bind
+  redis_data:
+    driver: local
+
+# Networks
+networks:
+  cli-network:
+    driver: bridge
+    name: cli-orchestrator-network

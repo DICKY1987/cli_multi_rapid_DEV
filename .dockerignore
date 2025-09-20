@@ -1,0 +1,157 @@
+# Personal files and directories (since repo is in home directory)
+Desktop/
+Documents/
+Downloads/
+Pictures/
+Videos/
+Music/
+AppData/
+OneDrive/
+"3D Objects/"
+"Saved Games/"
+Contacts/
+Favorites/
+Links/
+Searches/
+NTUSER.DAT*
+ntuser.dat*
+ntuser.ini
+
+# Development and cache directories
+.cache/
+.python_history
+.matplotlib/
+.lesshst
+.wdm/
+.dotnet/
+.config/
+.codex/
+.claude/
+.claude.json*
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Git and version control
+.git/
+.gitignore
+.gitconfig
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.log
+
+# Build and distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+parts/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+share/python-wheels/
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.ENV/
+.env
+
+# Project specific exclusions
+backups/
+temp_files/
+Monitor/
+Include/
+MicrosoftEdgeBackups/
+IntelGraphicsProfiles/
+Scripts/CreateShortcut*
+Scripts/SyncDashboardFiles*
+90%
+cd
+nul
+python
+filenames.txt
+file_list.txt
+
+# Trading system files (not needed in container)
+HUEY_P_TradingSystem/
+MT4_EE/
+TradingSystem/
+PowerhouseTradeSystem.mq4
+eafix*/
+*.mq4
+
+# AI and automation projects (external)
+AutoContentPro/
+Autonomous-_content-_creation_-TFP-Enterprises/
+ClaudeZeroTouch/
+PY_CLAUDE_GUI/
+ZeroTouchKit/
+ai_projects/
+python_gpt_knowledge/
+
+# Documentation and diagrams (keep only essential)
+*.drawio
+*.mmd
+ARCHITECTURE_DIAGRAMS.md
+README_DIAGRAMS.md
+TECHDOCS/
+drawio_import_guide.md
+
+# Installation and deployment scripts (not needed in container)
+AWS_SAM_CLI_64_PY3.msi
+install_status.json
+finish_setup.ps1
+make_shortcut_backup.ps1
+test_shortcut.ps1
+deploy_cli.*
+
+# Database and constraints
+"#START_Database_project_constraints/"
+
+# Windows specific
+MEMSTART
+WINDOW_USB_SETUP/
+
+# Git automation and external repos
+.universal-git-automation/
+git_100_setup/
+GIT_INTERGRATION_CLAUDE/
+eafix-remote/
+
+# Keep essential CLI orchestrator files:
+# - src/
+# - .ai/
+# - pyproject.toml
+# - requirements.txt
+# - CLAUDE.md
+# - Dockerfile
+# - docker-compose.yml
