@@ -1,0 +1,112 @@
+{
+  "adapter": "vscode_diagnostics",
+  "analyzers": [
+    "ruff"
+  ],
+  "files_analyzed": {
+    "javascript": [],
+    "python": [
+      "test_file.py"
+    ],
+    "typescript": []
+  },
+  "issues": [
+    {
+      "code": "F401",
+      "column": 8,
+      "file": "C:\\Users\\Richard Wilks\\test_file.py",
+      "line": 6,
+      "message": "`json` imported but unused",
+      "rule": "F401",
+      "severity": "warning",
+      "source": "ruff"
+    },
+    {
+      "code": "F401",
+      "column": 8,
+      "file": "C:\\Users\\Richard Wilks\\test_file.py",
+      "line": 7,
+      "message": "`sys` imported but unused",
+      "rule": "F401",
+      "severity": "warning",
+      "source": "ruff"
+    },
+    {
+      "code": "F401",
+      "column": 8,
+      "file": "C:\\Users\\Richard Wilks\\test_file.py",
+      "line": 9,
+      "message": "`os` imported but unused",
+      "rule": "F401",
+      "severity": "warning",
+      "source": "ruff"
+    },
+    {
+      "code": "F821",
+      "column": 33,
+      "file": "C:\\Users\\Richard Wilks\\test_file.py",
+      "line": 11,
+      "message": "Undefined name `Any`",
+      "rule": "F821",
+      "severity": "warning",
+      "source": "ruff"
+    }
+  ],
+  "results": {
+    "ruff": {
+      "error": null,
+      "exit_code": 1,
+      "issues": [
+        {
+          "code": "F401",
+          "column": 8,
+          "file": "C:\\Users\\Richard Wilks\\test_file.py",
+          "line": 6,
+          "message": "`json` imported but unused",
+          "rule": "F401",
+          "severity": "warning",
+          "source": "ruff"
+        },
+        {
+          "code": "F401",
+          "column": 8,
+          "file": "C:\\Users\\Richard Wilks\\test_file.py",
+          "line": 7,
+          "message": "`sys` imported but unused",
+          "rule": "F401",
+          "severity": "warning",
+          "source": "ruff"
+        },
+        {
+          "code": "F401",
+          "column": 8,
+          "file": "C:\\Users\\Richard Wilks\\test_file.py",
+          "line": 9,
+          "message": "`os` imported but unused",
+          "rule": "F401",
+          "severity": "warning",
+          "source": "ruff"
+        },
+        {
+          "code": "F821",
+          "column": 33,
+          "file": "C:\\Users\\Richard Wilks\\test_file.py",
+          "line": 11,
+          "message": "Undefined name `Any`",
+          "rule": "F821",
+          "severity": "warning",
+          "source": "ruff"
+        }
+      ],
+      "stderr": "",
+      "stdout": "[\n  {\n    \"cell\": null,\n    \"code\": \"F401\",\n    \"end_location\": {\n      \"column\": 12,\n      \"row\": 6\n    },\n    \"filename\": \"C:\\\\Users\\\\Richard Wilks\\\\test_file.py\",\n    \"fix\": {\n      \"applicability\": \"safe\",\n      \"edits\": [\n        {\n          \"content\": \"\",\n          \"end_location\": {\n            \"column\": 1,\n            \"row\": 7\n          },\n          \"location\": {\n            \"column\": 1,\n            \"row\": 6\n          }\n        }\n      ],\n      \"message\": \"Remove unused import: `json`\"\n    },\n    \"location\": {\n      \"column\": 8,\n      \"row\": 6\n    },\n    \"message\": \"`json` imported but unused\",\n    \"noqa_row\": 6,\n    \"url\": \"https://docs.astral.sh/ruff/rules/unused-import\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"F401\",\n    \"end_location\": {\n      \"column\": 11,\n      \"row\": 7\n    },\n    \"filename\": \"C:\\\\Users\\\\Richard Wilks\\\\test_file.py\",\n    \"fix\": {\n      \"applicability\": \"safe\",\n      \"edits\": [\n        {\n          \"content\": \"\",\n          \"end_location\": {\n            \"column\": 1,\n            \"row\": 8\n          },\n          \"location\": {\n            \"column\": 1,\n            \"row\": 7\n          }\n        }\n      ],\n      \"message\": \"Remove unused import: `sys`\"\n    },\n    \"location\": {\n      \"column\": 8,\n      \"row\": 7\n    },\n    \"message\": \"`sys` imported but unused\",\n    \"noqa_row\": 7,\n    \"url\": \"https://docs.astral.sh/ruff/rules/unused-import\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"F401\",\n    \"end_location\": {\n      \"column\": 10,\n      \"row\": 9\n    },\n    \"filename\": \"C:\\\\Users\\\\Richard Wilks\\\\test_file.py\",\n    \"fix\": {\n      \"applicability\": \"safe\",\n      \"edits\": [\n        {\n          \"content\": \"\",\n          \"end_location\": {\n            \"column\": 1,\n            \"row\": 10\n          },\n          \"location\": {\n            \"column\": 1,\n            \"row\": 9\n          }\n        }\n      ],\n      \"message\": \"Remove unused import: `os`\"\n    },\n    \"location\": {\n      \"column\": 8,\n      \"row\": 9\n    },\n    \"message\": \"`os` imported but unused\",\n    \"noqa_row\": 9,\n    \"url\": \"https://docs.astral.sh/ruff/rules/unused-import\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"F821\",\n    \"end_location\": {\n      \"column\": 36,\n      \"row\": 11\n    },\n    \"filename\": \"C:\\\\Users\\\\Richard Wilks\\\\test_file.py\",\n    \"fix\": null,\n    \"location\": {\n      \"column\": 33,\n      \"row\": 11\n    },\n    \"message\": \"Undefined name `Any`\",\n    \"noqa_row\": 11,\n    \"url\": \"https://docs.astral.sh/ruff/rules/undefined-name\"\n  }\n]"
+    }
+  },
+  "summary": {
+    "by_severity": {
+      "warning": 4
+    },
+    "total_issues": 4
+  },
+  "timestamp": "2025-09-20T12:00:00Z"
+}

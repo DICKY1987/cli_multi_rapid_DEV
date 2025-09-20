@@ -1,0 +1,21 @@
+{
+  "adapter": "code_fixers",
+  "files_processed": [
+    "test_file.py"
+  ],
+  "results": {
+    "black": {
+      "error": null,
+      "exit_code": 0,
+      "fixes_applied": 0,
+      "stderr": "reformatted test_file.py\n\nAll done! \\u2728 \\U0001f370 \\u2728\n1 file reformatted.\n",
+      "stdout": ""
+    }
+  },
+  "summary": {
+    "errors": [],
+    "total_fixes": 0,
+    "total_tools": 1
+  },
+  "timestamp": "2025-09-20T12:00:00Z"
+}

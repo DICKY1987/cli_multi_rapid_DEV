@@ -1,0 +1,303 @@
+"""
+Health check management for CLI Orchestrator services.
+
+Provides comprehensive health monitoring including:
+- Service readiness checks
+- Dependency health monitoring
+- Circuit breaker integration
+- Custom health check registration
+"""
+
+import asyncio
+import logging
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Callable, Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class HealthStatus(Enum):
+    """Health check status enumeration."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNHEALTHY = "unhealthy"
+
+
+@dataclass
+class HealthCheckResult:
+    """Result of a health check."""
+
+    name: str
+    status: HealthStatus
+    message: str = ""
+    duration_ms: float = 0.0
+    timestamp: float = field(default_factory=time.time)
+    details: Dict[str, Any] = field(default_factory=dict)
+
+
+class HealthCheck:
+    """Individual health check implementation."""
+
+    def __init__(
+        self,
+        name: str,
+        check_func: Callable[[], bool],
+        description: str = "",
+        timeout_seconds: float = 5.0,
+    ):
+        self.name = name
+        self.check_func = check_func
+        self.description = description
+        self.timeout_seconds = timeout_seconds
+
+    async def execute(self) -> HealthCheckResult:
+        """Execute the health check."""
+        start_time = time.time()
+
+        try:
+            # Run check with timeout
+            if asyncio.iscoroutinefunction(self.check_func):
+                result = await asyncio.wait_for(
+                    self.check_func(), timeout=self.timeout_seconds
+                )
+            else:
+                result = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(None, self.check_func),
+                    timeout=self.timeout_seconds,
+                )
+
+            duration_ms = (time.time() - start_time) * 1000
+
+            if result:
+                return HealthCheckResult(
+                    name=self.name,
+                    status=HealthStatus.HEALTHY,
+                    message="Check passed",
+                    duration_ms=duration_ms,
+                )
+            else:
+                return HealthCheckResult(
+                    name=self.name,
+                    status=HealthStatus.UNHEALTHY,
+                    message="Check failed",
+                    duration_ms=duration_ms,
+                )
+
+        except asyncio.TimeoutError:
+            duration_ms = (time.time() - start_time) * 1000
+            return HealthCheckResult(
+                name=self.name,
+                status=HealthStatus.UNHEALTHY,
+                message=f"Health check timed out after {self.timeout_seconds}s",
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            return HealthCheckResult(
+                name=self.name,
+                status=HealthStatus.UNHEALTHY,
+                message=f"Health check error: {str(e)}",
+                duration_ms=duration_ms,
+            )
+
+
+class HealthCheckManager:
+    """Manages all health checks for a service."""
+
+    def __init__(self, service_name: str):
+        self.service_name = service_name
+        self.checks: Dict[str, HealthCheck] = {}
+        self.last_results: Dict[str, HealthCheckResult] = {}
+        self.is_running = False
+        self._health_check_task: Optional[asyncio.Task] = None
+        self.check_interval = 30  # seconds
+
+    def add_check(self, health_check: HealthCheck) -> None:
+        """Add a health check."""
+        self.checks[health_check.name] = health_check
+        logger.info(f"Added health check: {health_check.name}")
+
+    def remove_check(self, check_name: str) -> None:
+        """Remove a health check."""
+        if check_name in self.checks:
+            del self.checks[check_name]
+            logger.info(f"Removed health check: {check_name}")
+
+    def add_default_checks(self) -> None:
+        """Add default health checks for CLI Orchestrator."""
+
+        # Basic system checks
+        self.add_check(
+            HealthCheck(
+                name="system_memory",
+                check_func=self._check_memory_usage,
+                description="Check system memory usage",
+            )
+        )
+
+        self.add_check(
+            HealthCheck(
+                name="workflow_schemas",
+                check_func=self._check_workflow_schemas,
+                description="Check workflow schema availability",
+            )
+        )
+
+        self.add_check(
+            HealthCheck(
+                name="artifacts_directory",
+                check_func=self._check_artifacts_directory,
+                description="Check artifacts directory is writable",
+            )
+        )
+
+    def _check_memory_usage(self) -> bool:
+        """Check if memory usage is within acceptable limits."""
+        try:
+            import psutil
+
+            memory_percent = psutil.virtual_memory().percent
+            # Alert if memory usage > 90%
+            return memory_percent < 90.0
+        except ImportError:
+            # If psutil not available, assume healthy
+            return True
+        except Exception:
+            return False
+
+    def _check_workflow_schemas(self) -> bool:
+        """Check if workflow schemas are available."""
+        try:
+            from pathlib import Path
+
+            schema_dir = Path(".ai/schemas")
+            return schema_dir.exists() and any(schema_dir.glob("*.schema.json"))
+        except Exception:
+            return False
+
+    def _check_artifacts_directory(self) -> bool:
+        """Check if artifacts directory is writable."""
+        try:
+            from pathlib import Path
+
+            artifacts_dir = Path("artifacts")
+            artifacts_dir.mkdir(exist_ok=True)
+
+            # Try to create a test file
+            test_file = artifacts_dir / ".health_check_test"
+            test_file.write_text("test")
+            test_file.unlink()
+            return True
+        except Exception:
+            return False
+
+    async def run_all_checks(self) -> Dict[str, HealthCheckResult]:
+        """Run all registered health checks."""
+        if not self.checks:
+            self.add_default_checks()
+
+        results = {}
+        tasks = []
+
+        # Create tasks for all checks
+        for check_name, check in self.checks.items():
+            task = asyncio.create_task(check.execute())
+            tasks.append((check_name, task))
+
+        # Wait for all checks to complete
+        for check_name, task in tasks:
+            try:
+                result = await task
+                results[check_name] = result
+                self.last_results[check_name] = result
+            except Exception as e:
+                logger.error(f"Error running health check {check_name}: {e}")
+                results[check_name] = HealthCheckResult(
+                    name=check_name,
+                    status=HealthStatus.UNHEALTHY,
+                    message=f"Check execution error: {str(e)}",
+                )
+
+        return results
+
+    async def get_overall_health(self) -> HealthCheckResult:
+        """Get overall service health status."""
+        results = await self.run_all_checks()
+
+        if not results:
+            return HealthCheckResult(
+                name="overall",
+                status=HealthStatus.HEALTHY,
+                message="No health checks configured",
+            )
+
+        # Determine overall status
+        unhealthy_checks = [
+            r for r in results.values() if r.status == HealthStatus.UNHEALTHY
+        ]
+        degraded_checks = [
+            r for r in results.values() if r.status == HealthStatus.DEGRADED
+        ]
+
+        if unhealthy_checks:
+            status = HealthStatus.UNHEALTHY
+            message = f"{len(unhealthy_checks)} checks failing"
+        elif degraded_checks:
+            status = HealthStatus.DEGRADED
+            message = f"{len(degraded_checks)} checks degraded"
+        else:
+            status = HealthStatus.HEALTHY
+            message = "All checks passing"
+
+        return HealthCheckResult(
+            name="overall",
+            status=status,
+            message=message,
+            details={
+                "total_checks": len(results),
+                "healthy": len(
+                    [r for r in results.values() if r.status == HealthStatus.HEALTHY]
+                ),
+                "degraded": len(degraded_checks),
+                "unhealthy": len(unhealthy_checks),
+                "checks": {
+                    name: {"status": result.status.value, "message": result.message}
+                    for name, result in results.items()
+                },
+            },
+        )
+
+    async def start(self) -> None:
+        """Start periodic health checking."""
+        if self.is_running:
+            return
+
+        self.is_running = True
+        self._health_check_task = asyncio.create_task(self._periodic_health_check())
+        logger.info("Health check manager started")
+
+    async def stop(self) -> None:
+        """Stop periodic health checking."""
+        self.is_running = False
+        if self._health_check_task:
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Health check manager stopped")
+
+    async def _periodic_health_check(self) -> None:
+        """Run health checks periodically."""
+        while self.is_running:
+            try:
+                await self.run_all_checks()
+                await asyncio.sleep(self.check_interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in periodic health check: {e}")
+                await asyncio.sleep(self.check_interval)
