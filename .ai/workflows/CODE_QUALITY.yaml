@@ -1,0 +1,23 @@
+version: 1
+name: Code Quality
+description: Basic code-quality workflow for cli-multi-rapid
+
+steps:
+  - id: lint
+    run: |
+      ruff check .
+      black --check .
+      isort --check-only .
+
+  - id: type-check
+    run: |
+      mypy src
+
+  - id: tests
+    run: |
+      pytest -q
+
+artifacts:
+  - path: artifacts/report.json
+    description: Placeholder for CI artifacts
+

@@ -1,0 +1,1 @@
+{"type":"object","required":["timestamp","type"],"properties":{"timestamp":{"type":"string"},"type":{"type":"string"}}}

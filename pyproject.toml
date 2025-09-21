@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cli-multi-rapid"
+version = "0.1.0"
+description = "Deterministic, schema-driven CLI orchestrator"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "Richard Wilks" }
+]
+dependencies = [
+  "typer[all]>=0.9.0",
+  "rich>=13.3.0",
+  "PyYAML>=6.0",
+  "jsonschema>=4.18.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pytest-cov>=4.1",
+  "mypy>=1.6",
+  "ruff>=0.6.5",
+  "black>=24.3.0",
+  "isort>=5.12.0",
+  "pre-commit>=3.5",
+  "types-PyYAML",
+  "types-requests",
+]
+
+[project.scripts]
+cli-orchestrator = "cli_multi_rapid.main:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cli_multi_rapid*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+select = [
+  "E", "F",  # Pyflakes/pycodestyle
+  "I",        # isort
+  "B",        # flake8-bugbear
+]
+ignore = [
+  "E402",  # allow imports after other code in CLI modules
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+src_paths = ["src", "tests"]
+
+[tool.pytest.ini_options]
+addopts = "-q --cov=cli_multi_rapid.verifier --cov-report=term-missing --cov-fail-under=85"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+strict_optional = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
