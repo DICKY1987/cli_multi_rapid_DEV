@@ -32,7 +32,7 @@ dev = [
 ]
 
 [project.scripts]
-cli-orchestrator = "cli_multi_rapid.main:app"
+cli-orchestrator = "cli_multi_rapid.cli_app:app"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

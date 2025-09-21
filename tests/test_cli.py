@@ -1,6 +1,6 @@
 from typer.testing import CliRunner
 
-from cli_multi_rapid.main import app
+from cli_multi_rapid.cli_app import app
 
 
 def test_cli_help_runs():
