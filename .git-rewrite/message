@@ -1,0 +1,1 @@
+feat(gui-terminal): add exit code reporting on POSIX, strip ANSI in UI, extend server ops; tests: exit code parity (POSIX only)

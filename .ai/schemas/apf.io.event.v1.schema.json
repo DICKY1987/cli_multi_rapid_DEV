@@ -1,0 +1,8 @@
+﻿{
+  "$id": "apf.io.event.v1.schema.json",
+  "title": "APF IO Event v1 (JSONL)",
+  "description": "One JSON object per line. Tools SHOULD prefix streamed lines with '##io_event ' for easy grepping.",
+  "type": "object",
+  "required": ["version","id","type","ts"],
+  "properties": {"version": {"const":"io.v1"}, "id": {"type":"string","description":"Run id (matches request.id)"}, "type": {"enum":["progress","metric","artifact","error","debug"]}, "ts": {"type":"string"}, "step": {"type":"string"}, "message": {"type":"string"}, "data": {"type":["object","array","string","number","boolean","null"]}}
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Code Review Artifact",
+  "type": "object",
+  "required": ["timestamp", "type", "review_type", "files_analyzed", "findings", "summary"],
+  "properties": {
+    "timestamp": {"type": "string"},
+    "type": {"const": "code_review"},
+    "review_type": {"const": "code_review"},
+    "model_used": {"type": "string"},
+    "files_analyzed": {"type": "array", "items": {"type": "string"}},
+    "focus_areas": {"type": "array", "items": {"type": "string"}},
+    "detail_level": {"type": "string"},
+    "findings": {"type": "array", "items": {"type": "object"}},
+    "summary": {"type": "object"}
+  }
+}

@@ -1,0 +1,96 @@
+"""
+Savepoint and state management utilities for workflow execution.
+"""
+
+import json
+import pathlib
+import subprocess
+from typing import Any, Dict, List
+
+
+def write_state(
+    job_id: str, state: Dict[str, Any], artifacts_dir: str = "artifacts"
+) -> None:
+    """Write workflow state to disk for recovery purposes."""
+    p = pathlib.Path(artifacts_dir) / job_id
+    p.mkdir(parents=True, exist_ok=True)
+    (p / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def read_state(job_id: str, artifacts_dir: str = "artifacts") -> Dict[str, Any]:
+    """Read workflow state from disk."""
+    p = pathlib.Path(artifacts_dir) / job_id / "state.json"
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def snapshot_patch(
+    job_id: str, label: str, paths: List[str], artifacts_dir: str = "artifacts"
+) -> str:
+    """Create a git patch snapshot for the current changes."""
+    p = pathlib.Path(artifacts_dir) / job_id / "patches"
+    p.mkdir(parents=True, exist_ok=True)
+    out = p / f"{label}.patch"
+
+    try:
+        # Create patch of current changes
+        with open(out, "wb") as f:
+            subprocess.run(
+                ["git", "diff", "--no-ext-diff"],
+                check=True,
+                stdout=f,
+                stderr=subprocess.DEVNULL,
+            )
+    except subprocess.CalledProcessError:
+        # Fallback: create empty patch file
+        out.write_text("# No changes detected\n", encoding="utf-8")
+    except Exception:
+        # If git fails, create a simple diff of provided paths
+        try:
+            with open(out, "w", encoding="utf-8") as f:
+                f.write(f"# Snapshot: {label}\n")
+                f.write(f"# Paths: {', '.join(paths)}\n")
+                f.write("# Git diff unavailable\n")
+        except Exception:
+            pass
+
+    return str(out)
+
+
+def list_savepoints(job_id: str, artifacts_dir: str = "artifacts") -> List[str]:
+    """List available savepoints for a job."""
+    p = pathlib.Path(artifacts_dir) / job_id
+    if not p.exists():
+        return []
+
+    savepoints = []
+    if (p / "state.json").exists():
+        savepoints.append("state.json")
+
+    patches_dir = p / "patches"
+    if patches_dir.exists():
+        for patch_file in patches_dir.glob("*.patch"):
+            savepoints.append(f"patches/{patch_file.name}")
+
+    return savepoints
+
+
+def cleanup_old_savepoints(
+    job_id: str, keep_last: int = 5, artifacts_dir: str = "artifacts"
+) -> None:
+    """Clean up old savepoint files, keeping only the most recent ones."""
+    p = pathlib.Path(artifacts_dir) / job_id / "patches"
+    if not p.exists():
+        return
+
+    patch_files = sorted(
+        p.glob("*.patch"), key=lambda x: x.stat().st_mtime, reverse=True
+    )
+
+    # Keep the most recent files, remove the rest
+    for old_file in patch_files[keep_last:]:
+        try:
+            old_file.unlink()
+        except Exception:
+            pass  # Ignore cleanup errors

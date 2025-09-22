@@ -1,0 +1,2 @@
+[console_scripts]
+cli-orchestrator = cli_multi_rapid.main:main

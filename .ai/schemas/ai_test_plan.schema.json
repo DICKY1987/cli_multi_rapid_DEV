@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Test Plan Artifact",
+  "type": "object",
+  "required": ["timestamp", "type", "plan_type", "test_scenarios"],
+  "properties": {
+    "timestamp": {"type": "string"},
+    "type": {"const": "test_planning"},
+    "plan_type": {"const": "test_planning"},
+    "model_used": {"type": "string"},
+    "test_scenarios": {"type": "array", "items": {"type": "object"}},
+    "coverage_targets": {"type": "object"}
+  }
+}

@@ -1,0 +1,531 @@
+#!/usr/bin/env python3
+"""
+CLI Orchestrator Workflow Runner
+
+Executes schema-validated YAML workflows with deterministic tool routing,
+AI escalation patterns, and parallel execution support.
+"""
+
+import asyncio
+import json
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional
+
+import yaml
+from rich.console import Console
+
+from .lib.error_recovery import IntelligentErrorRecovery
+from .lib.optimizer import PredictiveOptimizer
+from .lib.scheduler import ParallelWorkflowScheduler
+
+console = Console()
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class WorkflowResult:
+    """Result from workflow execution."""
+
+    success: bool
+    error: Optional[str] = None
+    artifacts: list[str] = None
+    tokens_used: int = 0
+    steps_completed: int = 0
+    execution_mode: str = "sequential"
+    parallel_stats: Optional[dict[str, Any]] = None
+
+    def __post_init__(self):
+        if self.artifacts is None:
+            self.artifacts = []
+
+
+class WorkflowRunner:
+    """Executes workflows with schema validation, cost tracking, and parallel execution."""
+
+    def __init__(self, parallel_enabled: bool = True, max_concurrent: int = 4):
+        self.console = Console()
+        self.parallel_enabled = parallel_enabled
+        self.max_concurrent = max_concurrent
+        self.scheduler = (
+            ParallelWorkflowScheduler(max_concurrent) if parallel_enabled else None
+        )
+        self.error_recovery = IntelligentErrorRecovery()
+        self.optimizer = PredictiveOptimizer()
+
+    def run(
+        self,
+        workflow_file: Path,
+        dry_run: bool = False,
+        files: Optional[str] = None,
+        lane: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        parallel: Optional[bool] = None,
+        optimize: bool = True,
+    ) -> WorkflowResult:
+        """Run a workflow with the given parameters."""
+
+        try:
+            # Load and validate workflow
+            workflow = self._load_workflow(workflow_file)
+            if not workflow:
+                return WorkflowResult(
+                    success=False, error=f"Failed to load workflow: {workflow_file}"
+                )
+
+            # Validate schema
+            if not self._validate_schema(workflow):
+                return WorkflowResult(
+                    success=False, error="Workflow schema validation failed"
+                )
+
+            # Determine execution mode
+            use_parallel = (
+                parallel
+                if parallel is not None
+                else (self.parallel_enabled and self._can_run_parallel(workflow))
+            )
+
+            # Optimize workflow if requested
+            if optimize:
+                workflow = self._optimize_workflow(workflow)
+
+            # Execute workflow
+            if use_parallel:
+                result = asyncio.run(
+                    self._execute_workflow_parallel(
+                        workflow,
+                        dry_run=dry_run,
+                        files=files,
+                        lane=lane,
+                        max_tokens=max_tokens,
+                    )
+                )
+            else:
+                result = self._execute_workflow_sequential(
+                    workflow,
+                    dry_run=dry_run,
+                    files=files,
+                    lane=lane,
+                    max_tokens=max_tokens,
+                )
+
+            return result
+
+        except Exception as e:
+            # Try error recovery
+            recovery_result = self._attempt_error_recovery(str(e), workflow_file)
+
+            return WorkflowResult(
+                success=False,
+                error=f"Workflow execution error: {str(e)}"
+                + (
+                    f" (Recovery attempted: {recovery_result})"
+                    if recovery_result
+                    else ""
+                ),
+            )
+
+    def _load_workflow(self, workflow_file: Path) -> Optional[dict[str, Any]]:
+        """Load YAML workflow file."""
+        try:
+            if not workflow_file.exists():
+                console.print(f"[red]Workflow file not found: {workflow_file}[/red]")
+                return None
+
+            with open(workflow_file, encoding="utf-8") as f:
+                workflow = yaml.safe_load(f)
+
+            console.print(
+                f"[green]Loaded workflow: {workflow.get('name', 'Unnamed')}[/green]"
+            )
+            return workflow
+
+        except Exception as e:
+            console.print(f"[red]Error loading workflow: {e}[/red]")
+            return None
+
+    def _validate_schema(self, workflow: dict[str, Any]) -> bool:
+        """Validate workflow against JSON schema."""
+        try:
+            # Import jsonschema only when needed
+            import jsonschema
+
+            schema_path = Path(".ai/schemas/workflow.schema.json")
+            if not schema_path.exists():
+                console.print(
+                    "[yellow]Schema validation skipped - schema file not found[/yellow]"
+                )
+                return True
+
+            with open(schema_path, encoding="utf-8") as f:
+                schema = json.load(f)
+
+            jsonschema.validate(workflow, schema)
+            console.print("[green]✓ Workflow schema validation passed[/green]")
+            return True
+
+        except ImportError:
+            console.print(
+                "[yellow]Schema validation skipped - jsonschema not available[/yellow]"
+            )
+            return True
+        except Exception as e:
+            console.print(f"[red]Schema validation failed: {e}[/red]")
+            return False
+
+    def _can_run_parallel(self, workflow: dict[str, Any]) -> bool:
+        """Check if workflow can be run in parallel."""
+        steps = workflow.get("steps", [])
+
+        # Must have multiple steps
+        if len(steps) < 2:
+            return False
+
+        # Check for dependencies that would prevent parallelization
+        any(step.get("depends_on") or step.get("dependencies") for step in steps)
+
+        # Can run parallel if steps are independent or have manageable dependencies
+        return True  # Let the scheduler handle dependency management
+
+    def _optimize_workflow(self, workflow: dict[str, Any]) -> dict[str, Any]:
+        """Optimize workflow using the predictive optimizer."""
+        try:
+            steps = workflow.get("steps", [])
+            if not steps:
+                return workflow
+
+            # Convert steps to nodes format for optimizer
+            nodes = []
+            for step in steps:
+                node = {
+                    "id": step.get("id", step.get("name", "unknown")),
+                    "tool": step.get("actor", "unknown"),
+                    "goal": step.get("name", ""),
+                    "dependencies": step.get(
+                        "depends_on", step.get("dependencies", [])
+                    ),
+                    "path_claims": step.get("path_claims", []),
+                }
+                nodes.append(node)
+
+            # Optimize nodes
+            optimized_nodes = self.optimizer.optimize_parallel_plan(
+                nodes, global_budget=workflow.get("policy", {}).get("max_tokens")
+            )
+
+            # Convert back to steps format
+            optimized_steps = []
+            for original_step, optimized_node in zip(steps, optimized_nodes):
+                optimized_step = original_step.copy()
+
+                # Update tool if optimized
+                if "optimization" in optimized_node:
+                    optimized_step["actor"] = optimized_node["tool"]
+                    optimized_step["_optimization"] = optimized_node["optimization"]
+
+                    self.console.print(
+                        f"[blue]Optimized step {optimized_node['id']}: "
+                        f"{optimized_node['optimization']['original_tool']} → "
+                        f"{optimized_node['tool']}[/blue]"
+                    )
+
+                optimized_steps.append(optimized_step)
+
+            workflow["steps"] = optimized_steps
+            return workflow
+
+        except Exception as e:
+            logger.warning(f"Workflow optimization failed: {e}")
+            return workflow
+
+    def _attempt_error_recovery(
+        self, error_message: str, workflow_file: Path
+    ) -> Optional[str]:
+        """Attempt to recover from workflow errors."""
+        try:
+            result = self.error_recovery.diagnose_error(
+                error_message, context={"workflow_file": str(workflow_file)}
+            )
+
+            if result:
+                pattern, details = result
+                if pattern.auto_fixable:
+                    success = self.error_recovery.attempt_recovery(pattern, details)
+                    return f"Recovery {'succeeded' if success else 'failed'}"
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"Error recovery failed: {e}")
+            return None
+
+    async def _execute_workflow_parallel(
+        self,
+        workflow: dict[str, Any],
+        dry_run: bool = False,
+        files: Optional[str] = None,
+        lane: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> WorkflowResult:
+        """Execute workflow using parallel scheduler."""
+
+        if not self.scheduler:
+            return WorkflowResult(
+                success=False, error="Parallel scheduler not available"
+            )
+
+        try:
+            # Convert workflow to DAG plan format
+            dag_plan = self._workflow_to_dag_plan(workflow, files, lane, max_tokens)
+
+            self.console.print(
+                f"[blue]Executing workflow in parallel mode ({self.max_concurrent} max concurrent)[/blue]"
+            )
+
+            if dry_run:
+                self.console.print(
+                    "[yellow]DRY RUN - parallel execution simulation[/yellow]"
+                )
+                return WorkflowResult(
+                    success=True,
+                    execution_mode="parallel_dry_run",
+                    steps_completed=len(dag_plan["nodes"]),
+                )
+
+            # Execute using parallel scheduler
+            result = await self.scheduler.execute_plan(dag_plan)
+
+            # Convert scheduler result to WorkflowResult
+            return WorkflowResult(
+                success=result.get("success", False),
+                error=None if result.get("success") else "Parallel execution failed",
+                artifacts=self._extract_artifacts_from_plan_result(result),
+                tokens_used=self._calculate_total_tokens(result),
+                steps_completed=len(result.get("completed", [])),
+                execution_mode="parallel",
+                parallel_stats={
+                    "completed_nodes": result.get("completed", []),
+                    "failed_nodes": result.get("failed", []),
+                    "execution_time": result.get("execution_time"),
+                    "concurrent_peak": self.max_concurrent,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Parallel execution failed: {e}")
+            return WorkflowResult(
+                success=False,
+                error=f"Parallel execution error: {str(e)}",
+                execution_mode="parallel_failed",
+            )
+
+    def _execute_workflow_sequential(
+        self,
+        workflow: dict[str, Any],
+        dry_run: bool = False,
+        files: Optional[str] = None,
+        lane: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> WorkflowResult:
+        """Execute workflow steps sequentially with routing and cost tracking."""
+
+        steps = workflow.get("steps", [])
+        if not steps:
+            return WorkflowResult(
+                success=True, steps_completed=0, execution_mode="sequential"
+            )
+
+        console.print(
+            f"[blue]Executing {len(steps)} workflow steps sequentially[/blue]"
+        )
+
+        total_tokens = 0
+        artifacts = []
+        completed_steps = 0
+
+        for i, step in enumerate(steps):
+            step_id = step.get("id", f"step-{i+1}")
+            step_name = step.get("name", f"Step {i+1}")
+            actor = step.get("actor", "unknown")
+
+            console.print(f"[cyan]Step {step_id}: {step_name}[/cyan]")
+            console.print(f"[dim]Actor: {actor}[/dim]")
+
+            if dry_run:
+                console.print("[yellow]DRY RUN - step skipped[/yellow]")
+                completed_steps += 1
+                continue
+
+            # Execute step
+            step_result = self._execute_step(step, files=files)
+
+            total_tokens += step_result.get("tokens_used", 0)
+            artifacts.extend(step_result.get("artifacts", []))
+
+            if not step_result.get("success", False):
+                error = step_result.get("error", "Step execution failed")
+
+                # Try error recovery
+                recovery_result = self._attempt_error_recovery(error, None)
+
+                return WorkflowResult(
+                    success=False,
+                    error=f"Step {step_id} failed: {error}"
+                    + (f" (Recovery: {recovery_result})" if recovery_result else ""),
+                    tokens_used=total_tokens,
+                    steps_completed=completed_steps,
+                    execution_mode="sequential",
+                )
+
+            completed_steps += 1
+
+            # Check token limit
+            if max_tokens and total_tokens > max_tokens:
+                return WorkflowResult(
+                    success=False,
+                    error=f"Token limit exceeded: {total_tokens} > {max_tokens}",
+                    tokens_used=total_tokens,
+                    steps_completed=completed_steps,
+                    execution_mode="sequential",
+                )
+
+        console.print(
+            f"[green]✓ Sequential workflow completed: {completed_steps} steps[/green]"
+        )
+        return WorkflowResult(
+            success=True,
+            artifacts=artifacts,
+            tokens_used=total_tokens,
+            steps_completed=completed_steps,
+            execution_mode="sequential",
+        )
+
+    def _workflow_to_dag_plan(
+        self,
+        workflow: dict[str, Any],
+        files: Optional[str] = None,
+        lane: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Convert workflow format to DAG plan format."""
+
+        nodes = []
+        for step in workflow.get("steps", []):
+            node = {
+                "id": step.get("id", step.get("name", f"step-{len(nodes)+1}")),
+                "tool": step.get("actor", "unknown"),
+                "goal": step.get("name", ""),
+                "dependencies": step.get("depends_on", step.get("dependencies", [])),
+                "path_claims": step.get("path_claims", []),
+                "estimated_cost": step.get("estimated_cost", 1000),
+                "priority": step.get("priority", 1),
+                "timeout_seconds": step.get("timeout_seconds", 300),
+                "capabilities": step.get("capabilities", []),
+            }
+
+            # Add context from workflow inputs
+            if files:
+                node["files"] = files
+            if lane:
+                node["lane"] = lane
+
+            nodes.append(node)
+
+        return {
+            "plan_id": workflow.get("name", "unnamed_workflow"),
+            "branch_base": lane or "main",
+            "global_budget_usd": max_tokens,
+            "nodes": nodes,
+            "merge_policy": {
+                "strategy": "direct",
+                "checklist": ["tests_pass", "schema_valid"],
+            },
+        }
+
+    def _extract_artifacts_from_plan_result(self, result: dict[str, Any]) -> list[str]:
+        """Extract artifacts from parallel plan execution result."""
+        artifacts = []
+
+        # This would be implemented based on how the scheduler stores artifacts
+        # For now, return empty list as placeholder
+
+        return artifacts
+
+    def _calculate_total_tokens(self, result: dict[str, Any]) -> int:
+        """Calculate total tokens used from plan execution result."""
+        # This would aggregate token usage from all nodes
+        # For now, return 0 as placeholder
+
+        return 0
+
+    # Add async support methods
+    async def run_async(
+        self,
+        workflow_file: Path,
+        dry_run: bool = False,
+        files: Optional[str] = None,
+        lane: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        parallel: Optional[bool] = None,
+        optimize: bool = True,
+    ) -> WorkflowResult:
+        """Async version of run method."""
+
+        # Load and validate workflow
+        workflow = self._load_workflow(workflow_file)
+        if not workflow:
+            return WorkflowResult(
+                success=False, error=f"Failed to load workflow: {workflow_file}"
+            )
+
+        if not self._validate_schema(workflow):
+            return WorkflowResult(
+                success=False, error="Workflow schema validation failed"
+            )
+
+        # Determine execution mode
+        use_parallel = (
+            parallel
+            if parallel is not None
+            else (self.parallel_enabled and self._can_run_parallel(workflow))
+        )
+
+        # Optimize workflow if requested
+        if optimize:
+            workflow = self._optimize_workflow(workflow)
+
+        # Execute workflow
+        if use_parallel:
+            return await self._execute_workflow_parallel(
+                workflow, dry_run=dry_run, files=files, lane=lane, max_tokens=max_tokens
+            )
+        else:
+            # Convert sequential to async
+            result = self._execute_workflow_sequential(
+                workflow, dry_run=dry_run, files=files, lane=lane, max_tokens=max_tokens
+            )
+            return result
+
+    def _execute_step(
+        self, step: dict[str, Any], files: Optional[str] = None
+    ) -> dict[str, Any]:
+        """Execute a single workflow step."""
+        # This is a placeholder implementation
+        # In a full implementation, this would route to the appropriate adapter
+
+        actor = step.get("actor", "unknown")
+        console.print(f"[dim]Executing actor: {actor}[/dim]")
+
+        # Simulate step execution
+        import time
+
+        time.sleep(0.1)  # Brief pause to simulate work
+
+        return {
+            "success": True,
+            "tokens_used": 50,  # Placeholder token usage
+            "artifacts": [],
+            "output": f"Step completed by {actor}",
+        }

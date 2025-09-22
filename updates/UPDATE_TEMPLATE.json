@@ -1,0 +1,58 @@
+{
+  "$schema": ".ai/schemas/plan_update.schema.json",
+  "update_id": "YYYY-MM-DDTHHMM_project_slug",
+  "version": "1.0.0",
+  "target_repo": "DICKY1987/cli_multi_rapid_DEV",
+  "metadata": {
+    "author": "AI/agent",
+    "created": "YYYY-MM-DD",
+    "description": "Short description of the change set"
+  },
+  "deliverables": [
+    {
+      "id": "doc.plan_updates",
+      "type": "file",
+      "title": "Plan Updates Guide",
+      "path": "docs/plan-updates.md",
+      "must_exist": true,
+      "must_contain": ["Plan Updates Workflow"]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "type": "assert_contains",
+      "file": "docs/plan-updates.md",
+      "must_contain": ["Plan Updates Workflow"]
+    }
+  ],
+  "operations": [
+    {
+      "type": "upsert_ops",
+      "module": "40-files-docs.json",
+      "strategy": "append",
+      "ops": [
+        {
+          "op": "write_file",
+          "path": "docs/plan-updates.md",
+          "content_base64": "<BASE64_CONTENT_HERE>",
+          "if_exists": "skip",
+          "phase": "apply",
+          "dry_run_effect": "noop"
+        }
+      ]
+    }
+  ],
+  "notes": {
+    "guidance": "Fill in deliverables to describe expected outputs. Add acceptance_criteria to codify success. Use operations to realize those deliverables.",
+    "examples": {
+      "deliverable_file": {
+        "id": "doc.plan_updates",
+        "type": "file",
+        "title": "Plan Updates Guide",
+        "path": "docs/plan-updates.md",
+        "must_exist": true,
+        "must_contain": ["Plan Updates Workflow"]
+      }
+    }
+  }
+}

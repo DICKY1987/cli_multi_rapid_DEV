@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/edit-command.json",
+  "title": "AI Edit Command Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "edit_id", "file_path", "edit_type", "created_at"],
+  "properties": {
+    "version": {"type": "string", "enum": ["1.0.0"], "description": "Schema version for compatibility checking"},
+    "edit_id": {"type": "string", "pattern": "^edit_[a-zA-Z0-9]{8}$", "description": "Unique identifier for this edit (edit_12345678)"},
+    "file_path": {"type": "string", "pattern": "^[^\u0000<>:\"|?*]+$", "description": "Valid file path, no invalid characters"},
+    "edit_type": {"type": "string", "enum": ["replace", "insert", "delete", "append", "prepend", "create_file"], "description": "Type of edit operation"},
+    "created_at": {"type": "string", "format": "date-time", "description": "ISO 8601 timestamp when edit was planned"},
+    "description": {"type": "string", "maxLength": 200, "description": "Human-readable description of the change"},
+    "rationale": {"type": "string", "maxLength": 500, "description": "Why this change is needed"},
+    "safety_checks": {"type": "object", "additionalProperties": false, "required": ["backup_required", "destructive"],
+      "properties": {"backup_required": {"type": "boolean"}, "destructive": {"type": "boolean"}, "affects_api": {"type": "boolean"}}}
+  },
+  "allOf": [
+    {"if": {"properties": {"edit_type": {"const": "replace"}}}, "then": {"required": ["start_line", "end_line", "new_content"],
+      "properties": {"start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "new_content": {"type": "string"}, "original_content": {"type": "string"}}}},
+    {"if": {"properties": {"edit_type": {"const": "insert"}}}, "then": {"required": ["line_number", "content"],
+      "properties": {"line_number": {"type": "integer", "minimum": 0}, "content": {"type": "string"}, "new_content": {"type": "string", "deprecated": true}}}},
+    {"if": {"properties": {"edit_type": {"const": "delete"}}}, "then": {"required": ["start_line", "end_line"],
+      "properties": {"start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "content_to_delete": {"type": "string"}}}},
+    {"if": {"properties": {"edit_type": {"enum": ["append", "prepend"]}}}, "then": {"required": ["content"],
+      "properties": {"content": {"type": "string"}, "new_content": {"type": "string", "deprecated": true}}}},
+    {"if": {"properties": {"edit_type": {"const": "create_file"}}}, "then": {"required": ["content"],
+      "properties": {"content": {"type": "string"}, "permissions": {"type": "string", "pattern": "^[0-7]{3}$"}}}}
+  ]
+}

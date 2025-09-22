@@ -1,0 +1,315 @@
+"""Python code quality tools adapters."""
+
+from __future__ import annotations
+
+from .process import CommandResult, ProcessRunner
+from .registry import get_selected_tool_path
+from .tools_base import PythonQuality, ToolProbe
+
+
+class QualitySuite:
+    """Python quality tools suite adapter."""
+
+    def __init__(self, runner: ProcessRunner) -> None:
+        self.runner = runner
+        self.ruff_binary = get_selected_tool_path("ruff", "python_quality")
+        self.mypy_binary = get_selected_tool_path("mypy", "python_quality")
+        self.bandit_binary = get_selected_tool_path("bandit", "python_quality")
+        self.semgrep_binary = get_selected_tool_path("semgrep", "python_quality")
+
+    def version(self) -> ToolProbe:
+        """Get version information for the quality suite."""
+        # Return a composite version info
+        return ToolProbe(
+            name="python_quality_suite",
+            path="multiple",
+            version="composite",
+            ok=True,
+            details="Composite Python quality tools suite",
+        )
+
+    def ruff_check(
+        self, paths: list[str] | None = None, fix: bool = False
+    ) -> CommandResult:
+        """Run ruff linting."""
+        args = [self.ruff_binary, "check"]
+        if fix:
+            args.append("--fix")
+        if paths:
+            args.extend(paths)
+        else:
+            args.append(".")
+        return self.runner.run(args)
+
+    def mypy_check(self, targets: list[str] | None = None) -> CommandResult:
+        """Run mypy type checking."""
+        args = [self.mypy_binary]
+        if targets:
+            args.extend(targets)
+        else:
+            args.append("src")  # Default to src directory
+        return self.runner.run(args)
+
+    def bandit_scan(self, target: str = "src") -> CommandResult:
+        """Run bandit security scan."""
+        args = [self.bandit_binary, "-q", "-r", target]
+        return self.runner.run(args)
+
+    def semgrep_scan(self, target: str = ".") -> CommandResult:
+        """Run semgrep static analysis."""
+        args = [self.semgrep_binary, "--error", "--config", "auto", target]
+        return self.runner.run(args)
+
+    def run_all(
+        self, fix: bool = False, paths: list[str] | None = None
+    ) -> dict[str, CommandResult]:
+        """Run all quality tools and return results."""
+        results: dict[str, CommandResult] = {}
+
+        # Run ruff
+        results["ruff"] = self.ruff_check(paths=paths, fix=fix)
+
+        # Run mypy
+        results["mypy"] = self.mypy_check(targets=paths)
+
+        # Run bandit (on src by default)
+        target = paths[0] if paths else "src"
+        results["bandit"] = self.bandit_scan(target=target)
+
+        # Run semgrep
+        scan_target = paths[0] if paths else "."
+        results["semgrep"] = self.semgrep_scan(target=scan_target)
+
+        return results
+
+    def generate_summary(self, results: dict[str, CommandResult]) -> str:
+        """Generate a summary report of quality check results."""
+        lines = ["Python Quality Tools Summary", "=" * 30, ""]
+
+        total_tools = len(results)
+        passed_tools = sum(1 for r in results.values() if r.code == 0)
+
+        for tool_name, result in results.items():
+            status = "✓ PASS" if result.code == 0 else "✗ FAIL"
+            duration = f"({result.duration_s:.2f}s)"
+            lines.append(f"{status} {tool_name} {duration}")
+
+            # Add error details for failed tools
+            if result.code != 0 and result.stderr:
+                lines.append(f"    Error: {result.stderr.strip()[:100]}...")
+
+        lines.extend(
+            [
+                "",
+                f"Summary: {passed_tools}/{total_tools} tools passed",
+                f"Overall: {'✓ PASS' if passed_tools == total_tools else '✗ FAIL'}",
+            ]
+        )
+
+        return "\n".join(lines)
+
+
+class RuffAdapter:
+    """Ruff linter adapter."""
+
+    def __init__(self, runner: ProcessRunner) -> None:
+        self.runner = runner
+        self.binary = get_selected_tool_path("ruff", "python_quality")
+
+    def version(self) -> ToolProbe:
+        """Get Ruff version information."""
+        try:
+            res = self.runner.run([self.binary, "--version"])
+            # Extract version from output like "ruff 0.1.6"
+            version = None
+            if res.stdout:
+                parts = res.stdout.strip().split()
+                if len(parts) >= 2:
+                    version = parts[1]
+
+            return ToolProbe(
+                name="ruff",
+                path=self.binary,
+                version=version,
+                ok=res.code == 0,
+                details=res.stderr if res.code != 0 else None,
+            )
+        except Exception as e:
+            return ToolProbe(
+                name="ruff",
+                path=None,
+                version=None,
+                ok=False,
+                details=str(e),
+            )
+
+    def check(
+        self,
+        paths: list[str] | None = None,
+        fix: bool = False,
+        config: str | None = None,
+    ) -> CommandResult:
+        """Run ruff check."""
+        args = [self.binary, "check"]
+        if fix:
+            args.append("--fix")
+        if config:
+            args.extend(["--config", config])
+        if paths:
+            args.extend(paths)
+        else:
+            args.append(".")
+        return self.runner.run(args)
+
+    def format(self, paths: list[str] | None = None) -> CommandResult:
+        """Run ruff format."""
+        args = [self.binary, "format"]
+        if paths:
+            args.extend(paths)
+        else:
+            args.append(".")
+        return self.runner.run(args)
+
+
+class MypyAdapter:
+    """MyPy type checker adapter."""
+
+    def __init__(self, runner: ProcessRunner) -> None:
+        self.runner = runner
+        self.binary = get_selected_tool_path("mypy", "python_quality")
+
+    def version(self) -> ToolProbe:
+        """Get MyPy version information."""
+        try:
+            res = self.runner.run([self.binary, "--version"])
+            # Extract version from output like "mypy 1.5.1"
+            version = None
+            if res.stdout:
+                parts = res.stdout.strip().split()
+                if len(parts) >= 2:
+                    version = parts[1]
+
+            return ToolProbe(
+                name="mypy",
+                path=self.binary,
+                version=version,
+                ok=res.code == 0,
+                details=res.stderr if res.code != 0 else None,
+            )
+        except Exception as e:
+            return ToolProbe(
+                name="mypy",
+                path=None,
+                version=None,
+                ok=False,
+                details=str(e),
+            )
+
+    def check(
+        self, targets: list[str] | None = None, config_file: str | None = None
+    ) -> CommandResult:
+        """Run mypy type checking."""
+        args = [self.binary]
+        if config_file:
+            args.extend(["--config-file", config_file])
+        if targets:
+            args.extend(targets)
+        else:
+            args.append("src")
+        return self.runner.run(args)
+
+
+class BanditAdapter:
+    """Bandit security scanner adapter."""
+
+    def __init__(self, runner: ProcessRunner) -> None:
+        self.runner = runner
+        self.binary = get_selected_tool_path("bandit", "python_quality")
+
+    def version(self) -> ToolProbe:
+        """Get Bandit version information."""
+        try:
+            res = self.runner.run([self.binary, "--version"])
+            # Extract version from output
+            version = None
+            if res.stdout:
+                import re
+
+                match = re.search(r"(\d+\.\d+\.\d+)", res.stdout)
+                if match:
+                    version = match.group(1)
+
+            return ToolProbe(
+                name="bandit",
+                path=self.binary,
+                version=version,
+                ok=res.code == 0,
+                details=res.stderr if res.code != 0 else None,
+            )
+        except Exception as e:
+            return ToolProbe(
+                name="bandit",
+                path=None,
+                version=None,
+                ok=False,
+                details=str(e),
+            )
+
+    def scan(
+        self, target: str = "src", recursive: bool = True, quiet: bool = True
+    ) -> CommandResult:
+        """Run bandit security scan."""
+        args = [self.binary]
+        if quiet:
+            args.append("-q")
+        if recursive:
+            args.append("-r")
+        args.append(target)
+        return self.runner.run(args)
+
+
+class SemgrepAdapter:
+    """Semgrep static analysis adapter."""
+
+    def __init__(self, runner: ProcessRunner) -> None:
+        self.runner = runner
+        self.binary = get_selected_tool_path("semgrep", "python_quality")
+
+    def version(self) -> ToolProbe:
+        """Get Semgrep version information."""
+        try:
+            res = self.runner.run([self.binary, "--version"])
+            # Extract version from output
+            version = None
+            if res.stdout:
+                import re
+
+                match = re.search(r"(\d+\.\d+\.\d+)", res.stdout)
+                if match:
+                    version = match.group(1)
+
+            return ToolProbe(
+                name="semgrep",
+                path=self.binary,
+                version=version,
+                ok=res.code == 0,
+                details=res.stderr if res.code != 0 else None,
+            )
+        except Exception as e:
+            return ToolProbe(
+                name="semgrep",
+                path=None,
+                version=None,
+                ok=False,
+                details=str(e),
+            )
+
+    def scan(self, target: str = ".", config: str = "auto") -> CommandResult:
+        """Run semgrep static analysis."""
+        args = [self.binary, "--error", "--config", config, target]
+        return self.runner.run(args)
+
+
+def create_python_quality_adapter(runner: ProcessRunner) -> PythonQuality:
+    """Factory function to create Python quality adapter."""
+    return QualitySuite(runner)
