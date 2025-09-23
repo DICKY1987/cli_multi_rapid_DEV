@@ -50,4 +50,3 @@ See `src/cli_multi_rapid/contracts/models.py` for canonical Pydantic definitions
 - Extension can poll `/status` and render `WorkflowStatus` transitions.
 - Extension can subscribe to `/events` and render `WorkflowEvent` messages.
 - Contract tests validate JSON schema round-trip.
-

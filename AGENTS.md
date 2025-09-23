@@ -37,4 +37,3 @@
 
 ## Agent-Specific Instructions
 - Follow this AGENTS.md across the repo. Validate workflows with dry-runs, respect schemas, and keep outputs reproducible. When in doubt, propose changes in small, reviewable PRs.
-

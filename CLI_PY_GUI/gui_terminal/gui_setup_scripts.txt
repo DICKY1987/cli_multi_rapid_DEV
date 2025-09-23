@@ -98,7 +98,7 @@ Write-Host "`n📋 Setting up GUI terminal files..." -ForegroundColor Yellow
 Write-Host "📝 Creating main GUI terminal script..." -ForegroundColor Cyan
 Write-Host "✅ GUI terminal script ready (use the artifacts provided)" -ForegroundColor Green
 
-# Step 6: Update launch mechanisms  
+# Step 6: Update launch mechanisms
 Write-Host "`n🚀 Updating launch mechanisms..." -ForegroundColor Yellow
 
 # Update Launch-Menu.ps1 to include GUI option
@@ -107,7 +107,7 @@ $UpdatedLaunchMenu = @'
 param()
 
 Write-Host "================================" -ForegroundColor Green
-Write-Host "  CLI Multi-Rapid System" -ForegroundColor Green  
+Write-Host "  CLI Multi-Rapid System" -ForegroundColor Green
 Write-Host "  Enterprise Orchestration Platform" -ForegroundColor Green
 Write-Host "================================" -ForegroundColor Green
 Write-Host
@@ -131,9 +131,9 @@ Write-Host
 do {
     $choice = Read-Host "Enter your choice (1-5)"
     $validChoice = $true
-    
+
     switch ($choice) {
-        "1" { 
+        "1" {
             Write-Host "🚀 Starting Python GUI Terminal..." -ForegroundColor Green
             if (Test-Path "gui\cli_terminal_gui.py") {
                 python gui\cli_terminal_gui.py
@@ -142,7 +142,7 @@ do {
                 Write-Host "Run: python gui/cli_terminal_gui.py" -ForegroundColor Yellow
             }
         }
-        "2" { 
+        "2" {
             Write-Host "Starting CLI interface..." -ForegroundColor Green
             Write-Host "Available commands:"
             Write-Host "  cli-multi-rapid --help"
@@ -165,7 +165,7 @@ do {
                 $validChoice = $false
             }
         }
-        "4" { 
+        "4" {
             Write-Host "Running quick system test..." -ForegroundColor Green
             & cli-multi-rapid greet "System Test"
             Write-Host
@@ -173,11 +173,11 @@ do {
             Write-Host "Test completed! Press any key to continue..."
             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         }
-        "5" { 
+        "5" {
             Write-Host "Goodbye!" -ForegroundColor Green
             exit
         }
-        default { 
+        default {
             Write-Host "Invalid choice. Please select 1-5." -ForegroundColor Red
             $validChoice = $false
         }
@@ -249,7 +249,7 @@ def test_cli_commands():
         ["python", "-m", "src.cli_multi_rapid.cli", "--help"],
         ["cli-multi-rapid", "--help"]
     ]
-    
+
     for cmd in commands:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
@@ -258,24 +258,24 @@ def test_cli_commands():
                 return True
         except (subprocess.TimeoutExpired, FileNotFoundError):
             continue
-    
+
     print("❌ CLI commands not working")
     return False
 
 def main():
     print("🧪 Testing GUI Terminal Setup")
     print("=" * 40)
-    
+
     success = True
     success &= test_gui_dependencies()
     success &= test_cli_commands()
-    
+
     if success:
         print("\n✅ All tests passed! GUI is ready to use.")
         print("🚀 Start GUI with: python gui/cli_terminal_gui.py")
     else:
         print("\n❌ Some tests failed. Check installation.")
-    
+
     return 0 if success else 1
 
 if __name__ == "__main__":

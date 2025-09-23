@@ -39,4 +39,3 @@ Start-Process explorer.exe -ArgumentList $DestinationFolder
 
 # Exit PowerShell
 exit
-

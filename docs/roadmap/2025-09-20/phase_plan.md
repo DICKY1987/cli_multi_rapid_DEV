@@ -60,4 +60,3 @@ Acceptance Criteria
 - Compose: `docker compose up -d && python scripts/healthcheck.py http://localhost:8000/healthz`.
 - Tests: `pytest -q --cov=src --cov-report=xml` and `pnpm test`.
 - Lint/type: `ruff check . && mypy src` and `pnpm lint && pnpm typecheck`.
-

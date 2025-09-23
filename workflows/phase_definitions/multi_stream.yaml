@@ -80,4 +80,3 @@ execution_order:
   - parallel: [stream-a, stream-b]
   - parallel: [stream-c, stream-d]
   - sequential: [stream-e]
-
