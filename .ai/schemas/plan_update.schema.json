@@ -1,0 +1,165 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "plan_update.schema.json",
+  "type": "object",
+  "required": ["update_id", "version", "target_repo", "operations"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "update_id": { "type": "string" },
+    "version": { "type": "string" },
+    "target_repo": { "type": "string" },
+    "compatible_plan_spec": { "type": "string" },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "author": { "type": "string" },
+        "created": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "deliverables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["file","report","patch","summary","log","artifact_bundle","url"] },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "path": { "type": "string" },
+          "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "must_exist": { "type": "boolean", "default": true },
+          "must_contain": { "type": "array", "items": { "type": "string" } },
+          "schema_ref": { "type": "string" },
+          "produce_phase": { "enum": ["compose","validate","apply","post-apply"] },
+          "source_selector": { "$ref": "#/definitions/op_selector" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "object", "required": ["type","file","must_contain"], "properties": { "type": { "const": "assert_contains" }, "file": { "type": "string" }, "must_contain": { "type": "array", "items": { "type": "string" } } } },
+          { "type": "object", "required": ["type","file","must_not_contain"], "properties": { "type": { "const": "assert_not_contains" }, "file": { "type": "string" }, "must_not_contain": { "type": "array", "items": { "type": "string" } } } },
+          { "type": "object", "required": ["type","path","expected_sha256"], "properties": { "type": { "const": "file_checksum" }, "path": { "type": "string" }, "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } }
+        ]
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type", "filename", "ops"],
+            "properties": {
+              "type": { "const": "add_module" },
+              "filename": { "type": "string" },
+              "module": { "type": "object" },
+              "ops": { "type": "array", "items": { "type": "object" } },
+              "position": { "enum": ["before", "after", "end"], "default": "end" },
+              "relative_to": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "module"],
+            "properties": {
+              "type": { "const": "upsert_ops" },
+              "module": { "type": "string" },
+              "ops": { "type": "array", "items": { "type": "object" } },
+              "strategy": { "enum": ["append", "prepend"], "default": "append" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "module", "selector"],
+            "properties": {
+              "type": { "const": "remove_ops" },
+              "module": { "type": "string" },
+              "selector": { "$ref": "#/definitions/op_selector" },
+              "max_remove": { "type": "integer", "minimum": 0 },
+              "required": { "type": "boolean", "default": true }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "module", "selector", "with_ops"],
+            "properties": {
+              "type": { "const": "replace_ops" },
+              "module": { "type": "string" },
+              "selector": { "$ref": "#/definitions/op_selector" },
+              "with_ops": { "type": "array", "items": { "type": "object" } }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "patch"],
+            "properties": {
+              "type": { "const": "set_metadata" },
+              "patch": { "type": "object" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "patch"],
+            "properties": {
+              "type": { "const": "set_defaults" },
+              "patch": { "type": "object" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "patch"],
+            "properties": {
+              "type": { "const": "set_execution" },
+              "patch": { "type": "object" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "allow", "deny"],
+            "properties": {
+              "type": { "const": "set_paths" },
+              "allow": { "type": "array", "items": { "type": "string" } },
+              "deny": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "manifest"],
+            "properties": {
+              "type": { "const": "update_manifest" },
+              "manifest": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "op_selector": {
+      "type": "object",
+      "oneOf": [
+        { "required": ["kind", "path"], "properties": { "kind": { "const": "write_file_path" }, "path": { "type": "string" } } },
+        { "required": ["kind", "file"], "properties": { "kind": { "const": "file" }, "file": { "type": "string" } } },
+        { "required": ["kind", "op"], "properties": { "kind": { "const": "op_type" }, "op": { "enum": ["write_file","replace_section","assert_contains","assert_not_contains","locate"] } } },
+        { "required": ["kind", "field", "pattern"], "properties": { "kind": { "const": "regex" }, "field": { "type": "string" }, "pattern": { "type": "string" } } }
+      ]
+    }
+  },
+  "additionalProperties": true
+}

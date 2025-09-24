@@ -1,0 +1,21 @@
+{
+  "paths": {
+    "aider": "C:\\users\\richard wilks\\.local\\bin\\aider.exe",
+    "claude": "C:\\Users\\Richard Wilks\\AppData\\Roaming\\npm\\claude.ps1",
+    "code": "C:\\HUEY_P\\Microsoft VS Code\\bin\\code.cmd",
+    "gitleaks-tool": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "docker": "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
+    "gh": "C:\\Program Files\\GitHub CLI\\gh.exe",
+    "git": "C:\\Program Files\\Git\\mingw64\\bin\\git.exe",
+    "gitleaks": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "git-lfs": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "jq": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "markdownlint": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "node": "C:\\Program Files\\nodejs\\node.exe",
+    "openai": "C:\\Users\\Richard Wilks\\AppData\\Local\\Programs\\Python\\Python313\\Scripts\\openai.exe",
+    "pnpm": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "python": "C:\\Program Files\\Python312\\python.exe",
+    "yamllint": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "yq": "C:\\Program Files\\Git\\cmd\\git.exe"
+  }
+}

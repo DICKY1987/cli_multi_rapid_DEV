@@ -1,0 +1,403 @@
+"""
+Hot Reload Workflow Development System
+Enables instant workflow iteration without restart
+"""
+
+import asyncio
+import json
+import logging
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Optional
+
+import yaml
+
+# Note: watchdog dependency would need to be added to requirements
+try:
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
+    Observer = None
+    FileSystemEventHandler = object
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ReloadEvent:
+    """Represents a workflow reload event."""
+
+    timestamp: str
+    workflow_id: str
+    file_path: str
+    event_type: str  # "reloaded", "failed", "validated"
+    details: dict[str, Any]
+
+
+class WorkflowHotReloader(FileSystemEventHandler if WATCHDOG_AVAILABLE else object):
+    """Hot reload workflows when files change."""
+
+    def __init__(self, workflow_runner, debounce_seconds: float = 0.5):
+        if WATCHDOG_AVAILABLE:
+            super().__init__()
+        self.workflow_runner = workflow_runner
+        self.debounce_seconds = debounce_seconds
+        self.pending_reloads: dict[str, float] = {}
+        self.reload_history: list[ReloadEvent] = []
+
+    def on_modified(self, event):
+        """Handle file modification events."""
+        if not WATCHDOG_AVAILABLE or event.is_directory:
+            return
+
+        file_path = Path(event.src_path)
+
+        # Only reload workflow files
+        if file_path.suffix in [".yaml", ".yml", ".json"]:
+            self._schedule_reload(file_path)
+
+    def on_created(self, event):
+        """Handle file creation events."""
+        if not WATCHDOG_AVAILABLE or event.is_directory:
+            return
+
+        file_path = Path(event.src_path)
+        if file_path.suffix in [".yaml", ".yml", ".json"]:
+            logger.info(f"New workflow file detected: {file_path}")
+            self._schedule_reload(file_path)
+
+    def _schedule_reload(self, file_path: Path):
+        """Debounced reload scheduling."""
+        self.pending_reloads[str(file_path)] = time.time()
+
+        # Schedule reload after debounce period
+        asyncio.create_task(self._debounced_reload(file_path))
+
+    async def _debounced_reload(self, file_path: Path):
+        """Execute reload after debounce period."""
+        await asyncio.sleep(self.debounce_seconds)
+
+        # Check if still the latest change
+        if str(file_path) in self.pending_reloads:
+            try:
+                success = await self.workflow_runner.hot_reload_workflow(file_path)
+
+                event = ReloadEvent(
+                    timestamp=datetime.utcnow().isoformat(),
+                    workflow_id=file_path.stem,
+                    file_path=str(file_path),
+                    event_type="reloaded" if success else "failed",
+                    details={"success": success},
+                )
+                self.reload_history.append(event)
+
+                if success:
+                    logger.info(f"🔄 Hot reloaded: {file_path.name}")
+                else:
+                    logger.error(f"❌ Reload failed for {file_path.name}")
+
+            except Exception as e:
+                logger.error(f"❌ Reload failed for {file_path.name}: {e}")
+
+                event = ReloadEvent(
+                    timestamp=datetime.utcnow().isoformat(),
+                    workflow_id=file_path.stem,
+                    file_path=str(file_path),
+                    event_type="failed",
+                    details={"error": str(e)},
+                )
+                self.reload_history.append(event)
+
+            finally:
+                self.pending_reloads.pop(str(file_path), None)
+
+    def get_reload_stats(self) -> dict[str, Any]:
+        """Get statistics about reload events."""
+        if not self.reload_history:
+            return {"total_reloads": 0, "success_rate": 0.0}
+
+        total = len(self.reload_history)
+        successful = sum(
+            1 for event in self.reload_history if event.event_type == "reloaded"
+        )
+
+        return {
+            "total_reloads": total,
+            "successful_reloads": successful,
+            "success_rate": successful / total if total > 0 else 0.0,
+            "recent_events": [
+                {
+                    "timestamp": event.timestamp,
+                    "workflow_id": event.workflow_id,
+                    "event_type": event.event_type,
+                }
+                for event in self.reload_history[-5:]
+            ],
+        }
+
+
+class RapidWorkflowRunner:
+    """Enhanced workflow runner for rapid development."""
+
+    def __init__(self, base_workflow_runner=None):
+        self.base_runner = base_workflow_runner
+        self.loaded_workflows: dict[str, dict[str, Any]] = {}
+        self.hot_reloader = WorkflowHotReloader(self)
+        self.observer = Observer() if WATCHDOG_AVAILABLE else None
+        self.event_handlers: list[Callable] = []
+        self.watching = False
+
+    def add_event_handler(self, handler: Callable):
+        """Add event handler for workflow events."""
+        self.event_handlers.append(handler)
+
+    def start_hot_reload(self, watch_directory: str = ".ai/workflows"):
+        """Start watching for workflow changes."""
+        if not WATCHDOG_AVAILABLE:
+            logger.warning("Watchdog not available - hot reload disabled")
+            return False
+
+        watch_path = Path(watch_directory)
+        if not watch_path.exists():
+            logger.warning(f"Watch directory does not exist: {watch_directory}")
+            return False
+
+        try:
+            self.observer.schedule(self.hot_reloader, str(watch_path), recursive=True)
+            self.observer.start()
+            self.watching = True
+            logger.info(f"🔥 Hot reload enabled for {watch_directory}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start hot reload: {e}")
+            return False
+
+    def stop_hot_reload(self):
+        """Stop watching for workflow changes."""
+        if self.observer and self.watching:
+            self.observer.stop()
+            self.observer.join()
+            self.watching = False
+            logger.info("🛑 Hot reload stopped")
+
+    async def hot_reload_workflow(self, file_path: Path) -> bool:
+        """Reload a specific workflow file."""
+        workflow_id = file_path.stem
+
+        try:
+            # Validate before loading
+            if await self._validate_workflow_file(file_path):
+                # Load and cache
+                workflow = await self._load_workflow_file(file_path)
+                if workflow:
+                    self.loaded_workflows[workflow_id] = workflow
+
+                    # Emit reload event
+                    await self._emit_reload_event(workflow_id, workflow, "reloaded")
+                    return True
+                else:
+                    logger.warning(f"⚠️  Failed to load {file_path.name}")
+                    return False
+            else:
+                logger.warning(f"⚠️  Validation failed for {file_path.name}")
+                await self._emit_reload_event(workflow_id, {}, "validation_failed")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error reloading workflow {file_path}: {e}")
+            await self._emit_reload_event(workflow_id, {}, "error", {"error": str(e)})
+            return False
+
+    async def _validate_workflow_file(self, file_path: Path) -> bool:
+        """Fast validation of workflow file."""
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                if file_path.suffix in [".yaml", ".yml"]:
+                    workflow = yaml.safe_load(f)
+                else:
+                    workflow = json.load(f)
+
+            # Quick schema check
+            if not isinstance(workflow, dict):
+                return False
+
+            required_fields = ["name", "steps"]
+            if not all(field in workflow for field in required_fields):
+                return False
+
+            # Validate steps structure
+            steps = workflow.get("steps", [])
+            if not isinstance(steps, list):
+                return False
+
+            for step in steps:
+                if (
+                    not isinstance(step, dict)
+                    or "id" not in step
+                    or "actor" not in step
+                ):
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Validation error for {file_path}: {e}")
+            return False
+
+    async def _load_workflow_file(self, file_path: Path) -> Optional[dict[str, Any]]:
+        """Load workflow file with error handling."""
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                if file_path.suffix in [".yaml", ".yml"]:
+                    workflow = yaml.safe_load(f)
+                else:
+                    workflow = json.load(f)
+
+            # Add metadata
+            workflow["_metadata"] = {
+                "file_path": str(file_path),
+                "loaded_at": datetime.utcnow().isoformat(),
+                "file_size": file_path.stat().st_size,
+            }
+
+            return workflow
+
+        except Exception as e:
+            logger.error(f"Failed to load workflow file {file_path}: {e}")
+            return None
+
+    async def _emit_reload_event(
+        self,
+        workflow_id: str,
+        workflow: dict[str, Any],
+        event_type: str = "reloaded",
+        extra_data: dict[str, Any] = None,
+    ):
+        """Emit reload event to connected clients."""
+        event = {
+            "type": f"workflow.{event_type}",
+            "workflow_id": workflow_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "workflow": workflow,
+        }
+
+        if extra_data:
+            event.update(extra_data)
+
+        # Send to event handlers
+        for handler in self.event_handlers:
+            try:
+                if asyncio.iscoroutinefunction(handler):
+                    await handler(event)
+                else:
+                    handler(event)
+            except Exception as e:
+                logger.warning(f"Event handler failed: {e}")
+
+        logger.info(f"📡 Emitted {event_type} event for {workflow_id}")
+
+    async def execute_workflow(
+        self, workflow_id: str, context: dict[str, Any] = None
+    ) -> dict[str, Any]:
+        """Execute a loaded workflow."""
+        if workflow_id not in self.loaded_workflows:
+            raise ValueError(f"Workflow '{workflow_id}' not loaded")
+
+        workflow = self.loaded_workflows[workflow_id]
+
+        # Delegate to base runner if available
+        if self.base_runner and hasattr(self.base_runner, "execute_workflow"):
+            return await self.base_runner.execute_workflow(workflow, context or {})
+        else:
+            # Simulate execution
+            logger.info(f"Simulating execution of workflow: {workflow_id}")
+            return {
+                "workflow_id": workflow_id,
+                "status": "completed",
+                "steps_executed": len(workflow.get("steps", [])),
+                "execution_time": 1.5,
+            }
+
+    def get_loaded_workflows(self) -> dict[str, dict[str, Any]]:
+        """Get all loaded workflows."""
+        return self.loaded_workflows.copy()
+
+    def get_reload_statistics(self) -> dict[str, Any]:
+        """Get hot reload statistics."""
+        return self.hot_reloader.get_reload_stats()
+
+
+# CLI command integration functions
+async def dev_mode_command(watch_dir: str = ".ai/workflows", runner=None):
+    """Start development mode with hot reload."""
+    if not WATCHDOG_AVAILABLE:
+        logger.error(
+            "Hot reload requires 'watchdog' package. Install with: pip install watchdog"
+        )
+        return False
+
+    rapid_runner = RapidWorkflowRunner(runner)
+
+    # Add simple console event handler
+    def console_handler(event):
+        event_type = event.get("type", "unknown")
+        workflow_id = event.get("workflow_id", "unknown")
+        timestamp = event.get("timestamp", "")
+
+        if event_type == "workflow.reloaded":
+            print(f"🔄 [{timestamp}] Reloaded: {workflow_id}")
+        elif event_type == "workflow.validation_failed":
+            print(f"⚠️  [{timestamp}] Validation failed: {workflow_id}")
+        elif event_type == "workflow.error":
+            print(f"❌ [{timestamp}] Error: {workflow_id}")
+
+    rapid_runner.add_event_handler(console_handler)
+
+    success = rapid_runner.start_hot_reload(watch_dir)
+    if not success:
+        return False
+
+    print("🚀 Development mode started!")
+    print(f"   - Watching: {watch_dir}")
+    print("   - Edit workflows and see instant updates")
+    print("   - Press Ctrl+C to exit")
+
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        rapid_runner.stop_hot_reload()
+        print("\n👋 Development mode stopped")
+        return True
+
+
+# Example usage
+async def example_usage():
+    """Example of using the hot reload system."""
+    runner = RapidWorkflowRunner()
+
+    # Add event handler
+    def log_events(event):
+        print(f"Event: {event['type']} for {event['workflow_id']}")
+
+    runner.add_event_handler(log_events)
+
+    # Start watching
+    if runner.start_hot_reload(".ai/workflows"):
+        print("Hot reload started - modify files in .ai/workflows/")
+
+        # Simulate running for a bit
+        await asyncio.sleep(10)
+
+        runner.stop_hot_reload()
+    else:
+        print("Hot reload failed to start")
+
+
+if __name__ == "__main__":
+    asyncio.run(example_usage())

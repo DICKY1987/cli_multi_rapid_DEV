@@ -1,0 +1,10 @@
+{
+  "command": "ProcessBroadcast",
+  "parameters": {
+    "message": {
+      "type": "validation_test",
+      "timestamp": 46714.062
+    }
+  },
+  "timestamp": "46721.39"
+}
