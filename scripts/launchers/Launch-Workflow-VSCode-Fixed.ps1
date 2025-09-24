@@ -42,19 +42,19 @@ if ($DryRun) {
 } else {
     # Launch VS Code with workspace
     Start-Process "code" -ArgumentList $codeArgs -NoNewWindow
-    
+
     # Wait a moment then launch the CLI system in separate terminal
     Start-Sleep -Seconds 2
-    
+
     Write-Host "✅ VS Code launched successfully!" -ForegroundColor Green
     Write-Host "🔧 Opening workflow terminal..." -ForegroundColor Cyan
-    
+
     # Launch workflow terminal
     $terminalTitle = "CLI Multi-Rapid Workflow System"
     $terminalCmd = @"
 title $terminalTitle && cd /d "$WorkspaceFolder" && echo 🚀 CLI Multi-Rapid Workflow System Ready! && echo. && echo Available Commands: && echo   • cli-multi-rapid phase stream list && echo   • cli-multi-rapid phase stream run stream-a --dry && echo   • cli-multi-rapid workflow-status && echo   • cli-multi-rapid compliance check && echo. && cli-multi-rapid --help
 "@
-    
+
     Start-Process "cmd" -ArgumentList "/k", $terminalCmd
 }
 

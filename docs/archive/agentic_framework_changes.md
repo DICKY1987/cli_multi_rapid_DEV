@@ -2,7 +2,7 @@
 
 ## 1. Service Priority Restructuring
 
-**Current hierarchy:** Gemini → Codeium → Local  
+**Current hierarchy:** Gemini → Codeium → Local
 **New agentic hierarchy:**
 
 ```json
@@ -18,7 +18,7 @@
       },
       "claude_code": {
         "dailyLimit": 25,
-        "priority": 2, 
+        "priority": 2,
         "cost": "premium",
         "costPerRequest": 0.15,
         "useCase": "complex_agentic",
@@ -34,7 +34,7 @@
         "complexity": ["simple", "moderate"]
       },
       "ollama_local": {
-        "dailyLimit": "unlimited", 
+        "dailyLimit": "unlimited",
         "priority": 4,
         "cost": "free",
         "useCase": "fallback",
@@ -64,7 +64,7 @@ Add to framework config:
     },
     "moderate": {
       "description": "Multi-file changes, feature implementation, code reviews",
-      "recommendedService": "aider_local", 
+      "recommendedService": "aider_local",
       "examples": [
         "implement API endpoint", "add test suite", "refactor class",
         "integrate third-party library", "database schema changes"
@@ -104,7 +104,7 @@ Add to framework config:
           "cost": "free"
         },
         {
-          "name": "plan", 
+          "name": "plan",
           "service": "claude_code",
           "purpose": "architecture and planning",
           "cost": "premium",
@@ -112,7 +112,7 @@ Add to framework config:
         },
         {
           "name": "implement",
-          "service": "aider_local", 
+          "service": "aider_local",
           "purpose": "code generation",
           "cost": "free"
         }
@@ -128,14 +128,14 @@ Add to framework config:
           "complexity": ["simple", "moderate"]
         },
         "architect": {
-          "service": "claude_code", 
+          "service": "claude_code",
           "purpose": "system design and planning",
           "complexity": ["complex"],
           "requiresApproval": true
         },
         "implementer": {
           "service": "aider_local",
-          "purpose": "code generation and implementation", 
+          "purpose": "code generation and implementation",
           "complexity": ["simple", "moderate"]
         },
         "reviewer": {
@@ -163,37 +163,37 @@ Add these functions to `free_tier_orchestrator.txt`:
 ```powershell
 function Get-TaskComplexity {
     param([string]$TaskDescription)
-    
+
     $complexKeywords = @(
         "architecture", "redesign", "refactor large", "performance optimization",
-        "security audit", "database migration", "infrastructure overhaul", 
+        "security audit", "database migration", "infrastructure overhaul",
         "multi-service", "microservices", "research", "system design",
         "cross-platform", "scalability", "integration strategy"
     )
-    
+
     $moderateKeywords = @(
         "feature implementation", "API development", "integration",
         "test suite", "validation logic", "configuration management",
         "multi-file refactor", "component development", "data modeling"
     )
-    
+
     $simpleKeywords = @(
         "fix bug", "typo", "format", "logging", "comment", "documentation",
         "variable rename", "import cleanup", "style fix", "small refactor"
     )
-    
+
     foreach ($keyword in $complexKeywords) {
         if ($TaskDescription -like "*$keyword*") {
             return "complex"
         }
     }
-    
+
     foreach ($keyword in $moderateKeywords) {
         if ($TaskDescription -like "*$keyword*") {
             return "moderate"
         }
     }
-    
+
     return "simple"
 }
 
@@ -203,50 +203,50 @@ function Get-OptimalService {
         [string]$Complexity = $null,
         [switch]$Force
     )
-    
+
     if (-not $Complexity) {
         $Complexity = Get-TaskComplexity $TaskDescription
     }
-    
+
     $config = Get-FrameworkConfig
     $tracker = Get-QuotaTracker
-    
+
     $recommendedService = $config.taskClassification.$Complexity.recommendedService
-    
+
     # Special handling for Claude Code
     if ($recommendedService -eq "claude_code" -and -not $Force) {
         $currentUsage = $tracker.services.claude_code ?? 0
         $dailyLimit = $config.quotaManagement.services.claude_code.dailyLimit
         $warningThreshold = $config.quotaManagement.services.claude_code.warningThreshold
         $costPerRequest = $config.quotaManagement.services.claude_code.costPerRequest
-        
+
         $usagePercent = $currentUsage / $dailyLimit
         $estimatedCost = $currentUsage * $costPerRequest
-        
+
         Write-Host "💰 Claude Code Usage Analysis:" -ForegroundColor Yellow
         Write-Host "  Current usage: $currentUsage/$dailyLimit ($([math]::Round($usagePercent * 100, 1))%)" -ForegroundColor Cyan
         Write-Host "  Today's cost: $([math]::Round($estimatedCost, 2))" -ForegroundColor Red
         Write-Host "  Request cost: $costPerRequest" -ForegroundColor Yellow
-        
+
         if ($usagePercent -gt $warningThreshold) {
             Write-Host "⚠️  WARNING: High Claude Code usage!" -ForegroundColor Red
             Write-Host "💡 Consider alternatives:" -ForegroundColor Blue
             Write-Host "  - Break task into smaller parts" -ForegroundColor Green
             Write-Host "  - Use Gemini CLI for research phase" -ForegroundColor Green
             Write-Host "  - Use Aider + local models for implementation" -ForegroundColor Green
-            
+
             $confirm = Read-Host "Continue with Claude Code? (y/N)"
             if ($confirm -ne "y") {
                 Write-Host "🔄 Falling back to cost-optimized alternatives" -ForegroundColor Cyan
                 return "aider_local"
             }
         }
-        
+
         # Show cost breakdown for transparency
         $monthlyProjection = $estimatedCost * 30
         Write-Host "📊 Monthly projection: $([math]::Round($monthlyProjection, 2))" -ForegroundColor Yellow
     }
-    
+
     return $recommendedService
 }
 
@@ -255,23 +255,23 @@ function Start-AgenticWorkflow {
         [string]$TaskDescription,
         [string]$WorkflowType = "research_plan_code"
     )
-    
+
     $config = Get-FrameworkConfig
     $workflow = $config.agenticPatterns.$WorkflowType
-    
+
     if (-not $workflow.enabled) {
         Write-Error "Workflow '$WorkflowType' is not enabled"
         return
     }
-    
+
     Write-Host "🤖 Starting agentic workflow: $WorkflowType" -ForegroundColor Blue
     Write-Host "📝 Task: $TaskDescription" -ForegroundColor Cyan
-    
+
     foreach ($phase in $workflow.phases) {
         Write-Host "`n🔄 Phase: $($phase.name)" -ForegroundColor Green
         Write-Host "🛠️  Service: $($phase.service)" -ForegroundColor Cyan
         Write-Host "💰 Cost: $($phase.cost)" -ForegroundColor Yellow
-        
+
         if ($phase.requiresApproval) {
             $confirm = Read-Host "Proceed with $($phase.service)? (y/N)"
             if ($confirm -ne "y") {
@@ -279,7 +279,7 @@ function Start-AgenticWorkflow {
                 continue
             }
         }
-        
+
         # Execute phase
         switch ($phase.service) {
             "gemini_cli" {
@@ -297,7 +297,7 @@ function Start-AgenticWorkflow {
             }
         }
     }
-    
+
     Write-Host "`n✅ Agentic workflow completed!" -ForegroundColor Green
 }
 ```
@@ -311,15 +311,15 @@ switch ($Command) {
             Write-Error "Message parameter required for task analysis"
             exit 1
         }
-        
+
         $complexity = Get-TaskComplexity $Message
         $service = Get-OptimalService $Message $complexity
-        
+
         Write-Host "🎯 Task Analysis Results:" -ForegroundColor Blue
         Write-Host "  Description: $Message" -ForegroundColor Cyan
         Write-Host "  Complexity: $complexity" -ForegroundColor Yellow
         Write-Host "  Recommended Service: $service" -ForegroundColor Green
-        
+
         if ($service -eq "claude_code") {
             Write-Host "`n💡 Cost Optimization Tips:" -ForegroundColor Blue
             Write-Host "  1. Break complex tasks into phases" -ForegroundColor Green
@@ -327,29 +327,29 @@ switch ($Command) {
             Write-Host "  3. Research with Gemini (free) first" -ForegroundColor Green
         }
     }
-    
+
     "start-agentic" {
         if (-not $Message) {
             Write-Error "Message parameter required for agentic workflow"
             exit 1
         }
-        
+
         $workflowType = if ($Lane) { $Lane } else { "research_plan_code" }
         Start-AgenticWorkflow $Message $workflowType
     }
-    
+
     "cost-report" {
         $tracker = Get-QuotaTracker
         $config = Get-FrameworkConfig
-        
+
         Write-Host "💰 Daily Cost Report:" -ForegroundColor Blue
         Write-Host "=====================" -ForegroundColor Blue
-        
+
         $totalCost = 0
         foreach ($serviceName in $config.quotaManagement.services.PSObject.Properties.Name) {
             $service = $config.quotaManagement.services.$serviceName
             $usage = $tracker.services.$serviceName ?? 0
-            
+
             if ($service.costPerRequest) {
                 $cost = $usage * $service.costPerRequest
                 $totalCost += $cost
@@ -358,24 +358,24 @@ switch ($Command) {
                 Write-Host "  $serviceName`: $usage requests = $0.00 (free)" -ForegroundColor Green
             }
         }
-        
+
         Write-Host "`nTotal daily cost: $([math]::Round($totalCost, 2))" -ForegroundColor Yellow
         Write-Host "Monthly projection: $([math]::Round($totalCost * 30, 2))" -ForegroundColor Red
         Write-Host "vs Commercial alternatives: ~$500/month" -ForegroundColor Cyan
         Write-Host "💰 Savings: $([math]::Round(500 - ($totalCost * 30), 2))/month" -ForegroundColor Green
     }
-    
+
     "optimize-task" {
         if (-not $Message) {
             Write-Error "Message parameter required"
             exit 1
         }
-        
+
         Write-Host "🎯 Task Optimization Suggestions:" -ForegroundColor Blue
         Write-Host "===================================" -ForegroundColor Blue
-        
+
         $complexity = Get-TaskComplexity $Message
-        
+
         switch ($complexity) {
             "complex" {
                 Write-Host "🏗️  Complex Task Detected - Use Research-Plan-Code:" -ForegroundColor Red
@@ -423,10 +423,10 @@ switch ($Command) {
       "costBudget": "$0/day",
       "allowedPatterns": ["docs/**", "research/**", "*.md"]
     },
-    
+
     "agentic_architecture": {
       "name": "System Architecture & Complex Design",
-      "worktreePath": ".worktrees/architecture", 
+      "worktreePath": ".worktrees/architecture",
       "branch": "lane/architecture",
       "tools": {
         "primary": {
@@ -449,11 +449,11 @@ switch ($Command) {
       "warningThreshold": 0.6,
       "allowedPatterns": ["architecture/**", "design/**", "*.arch.md"]
     },
-    
+
     "agentic_implementation": {
       "name": "AI-Powered Code Implementation",
       "worktreePath": ".worktrees/implementation",
-      "branch": "lane/implementation", 
+      "branch": "lane/implementation",
       "tools": {
         "primary": {
           "tool": "aider",
@@ -498,7 +498,7 @@ Analyze incoming task to determine appropriate AI service and workflow
 - **task_description** (string) · required
 - **user_preferences** (object) · optional
 
-**Outputs** 
+**Outputs**
 - **complexity_level** (enum: simple|moderate|complex)
 - **recommended_service** (string)
 - **estimated_cost** (number)
@@ -526,13 +526,13 @@ Analyze incoming task to determine appropriate AI service and workflow
 ### 1.002 — Execute Agentic Workflow  `[AGENT.002]`
 Run the selected workflow pattern with appropriate services
 
-- **Actor:** SYSTEM  
+- **Actor:** SYSTEM
 - **Owner:** Agentic Orchestrator
 - **SLA:** Variable (depends on complexity)
 
 **Inputs**
 - **workflow_type** (string) · required
-- **complexity_level** (string) · required  
+- **complexity_level** (string) · required
 - **task_description** (string) · required
 
 **Outputs**
@@ -556,12 +556,12 @@ Add to usage guide:
 ./orchestrator.ps1 -Command start-lane -Lane agentic_research
 gemini "research best practices for microservices authentication"
 
-# Mid-morning: Plan with Claude Code (premium, budget controlled)  
+# Mid-morning: Plan with Claude Code (premium, budget controlled)
 ./orchestrator.ps1 -Command analyze-task -Message "Design authentication system architecture"
 ./orchestrator.ps1 -Command start-agentic -Message "Design auth system" -Lane research_plan_code
 
 # Afternoon: Implement with free tools
-./orchestrator.ps1 -Command start-lane -Lane agentic_implementation  
+./orchestrator.ps1 -Command start-lane -Lane agentic_implementation
 aider --model ollama/codellama:7b-instruct "implement the authentication system"
 
 # Evening: Review and integrate
@@ -583,23 +583,23 @@ Add to `free_tier_setup.sh`:
 # Install agentic tools
 install_agentic_tools() {
     log_info "Installing agentic AI tools..."
-    
+
     # Claude Code (requires API key)
     if command -v npm >/dev/null 2>&1; then
         npm install -g @anthropic-ai/claude-code
     else
         log_warning "npm not found - install Claude Code manually"
     fi
-    
+
     # Aider - AI pair programmer
     pip3 install aider-chat
-    
+
     # Continue CLI
     npm install -g @continuedev/cli || log_warning "Continue CLI installation failed"
-    
+
     # Local model optimization
     pip3 install llama-cpp-python
-    
+
     log_success "Agentic tools installed"
 }
 ```
@@ -607,7 +607,7 @@ install_agentic_tools() {
 ## Key Benefits of This Agentic Integration
 
 1. **Cost Control**: Claude Code usage drops 70-80% through intelligent task routing
-2. **Quality Maintained**: Complex tasks still get premium AI, simple tasks use free tiers  
+2. **Quality Maintained**: Complex tasks still get premium AI, simple tasks use free tiers
 3. **Scalability**: Local models handle bulk work, APIs handle edge cases
 4. **Transparency**: Full cost tracking and optimization suggestions
 5. **Flexibility**: Easy to adjust thresholds and add new services
@@ -615,7 +615,7 @@ install_agentic_tools() {
 ## Migration Strategy
 
 1. **Week 1**: Implement task complexity classification
-2. **Week 2**: Add Claude Code with strict quotas  
+2. **Week 2**: Add Claude Code with strict quotas
 3. **Week 3**: Integrate agentic workflow patterns
 4. **Week 4**: Add cost reporting and optimization
 5. **Ongoing**: Monitor usage and adjust thresholds

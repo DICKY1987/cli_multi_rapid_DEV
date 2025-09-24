@@ -2,11 +2,11 @@
 
 This bundle implements full solutions for:
 
-1) Real PTY backend with resize + signals  
-2) Signal palette + safe argv + preview  
-3) ANSI MVP (CR, BS, CSI K)  
-4) Headless parity harness  
-5) Hardened quick-actions (no hidden flags)  
+1) Real PTY backend with resize + signals
+2) Signal palette + safe argv + preview
+3) ANSI MVP (CR, BS, CSI K)
+4) Headless parity harness
+5) Hardened quick-actions (no hidden flags)
 6) Operator polish (open system terminal, status strip)
 
 ---
@@ -830,4 +830,3 @@ python -m tests.parity_test_harness
 - Ctrl‑C uses process‑group signaling on POSIX and `^C` injection on Windows consoles (best effort). `Kill` is a hard terminate.
 - Raw PTY bytes are ring‑buffered in memory and can be dumped via the harness for comparisons with a native terminal capture.
 ```
-

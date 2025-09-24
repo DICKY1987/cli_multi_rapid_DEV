@@ -1,0 +1,46 @@
+"""
+CLI Orchestrator Advanced Components Library
+
+This module contains advanced components for the CLI Orchestrator including
+parallel scheduling, error recovery, hot reload, optimization, and smart templates.
+"""
+
+__version__ = "1.0.0"
+
+try:
+    from .error_recovery import ErrorSeverity, IntelligentErrorRecovery
+    from .hot_reload import RapidWorkflowRunner, WorkflowHotReloader
+    from .optimizer import PredictiveOptimizer, ToolPerformanceMetrics
+    from .scheduler import ConflictDetector, ParallelWorkflowScheduler
+    from .templates import SmartTemplateGenerator, WorkflowAnalyzer
+
+    __all__ = [
+        "ParallelWorkflowScheduler",
+        "ConflictDetector",
+        "IntelligentErrorRecovery",
+        "ErrorSeverity",
+        "RapidWorkflowRunner",
+        "WorkflowHotReloader",
+        "PredictiveOptimizer",
+        "ToolPerformanceMetrics",
+        "SmartTemplateGenerator",
+        "WorkflowAnalyzer",
+    ]
+
+except ImportError as e:
+    # Graceful degradation if dependencies are missing
+    __all__ = []
+    import warnings
+
+    warnings.warn(
+        f"CLI Orchestrator lib components not fully available: {e}", stacklevel=2
+    )
+
+# Version and feature flags
+FEATURES = {
+    "parallel_execution": True,
+    "error_recovery": True,
+    "hot_reload": True,
+    "predictive_optimization": True,
+    "smart_templates": True,
+}
