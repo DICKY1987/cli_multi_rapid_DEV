@@ -15,4 +15,3 @@ $argsList = @('scripts/merge_vscode_configs.py', '--mode', $Mode)
 if ($Backup) { $argsList += '--backup' }
 
 & $python @argsList
-

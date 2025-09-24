@@ -35,14 +35,14 @@ Input:
   lines: 245                       # Small file
   prompt: "Extract helper method"  # Simple task
   git_clean: true                  # No violations
-  
+
 Decision Path:
   ✅ Git state clean
   ✅ Path allowed (src/*.py)
   ✅ File count (1) < limit (12)
   ✅ File size (245 lines) < complex threshold (500)
   ✅ Task complexity: SIMPLE
-  
+
 → Result: aider_local
 → Reasoning: "Small, simple change - local tool optimal"
 ```
@@ -54,14 +54,14 @@ Input:
   lines: 1847                                  # Large changeset
   prompt: "Implement OAuth2 with JWT refresh" # Complex task
   git_clean: true                              # No violations
-  
+
 Decision Path:
   ✅ Git state clean
   ✅ Paths allowed
   ⚠️  File count (8) approaching limit
   ⚠️  Total lines (1847) > complexity threshold
   ⚠️  Task complexity: COMPLEX (architecture keywords)
-  
+
 → Result: claude_code
 → Reasoning: "Large, complex changeset requires sophisticated reasoning"
 ```
@@ -73,12 +73,12 @@ Input:
   lines: 89                               # Small file
   prompt: "Fix column type"               # Simple task
   git_clean: true
-  
+
 Decision Path:
   ✅ Git state clean
   ❌ Path violation: migrations/ not in allowlist
   [HARD_BLOCK triggered]
-  
+
 → Result: vscode_editor
 → Reasoning: "Path restriction requires manual review"
 ```
@@ -91,14 +91,14 @@ Input:
   prompt: "Add rate limiting"      # Moderate task
   git_clean: true
   claude_quota: 85%                # Near limit
-  
+
 Decision Path:
   ✅ Git state clean
   ✅ Path allowed
   ✅ File count OK
   ⚠️  Normally would choose claude_code
   ❌ Claude quota >80% threshold
-  
+
 → Result: aider_local
 → Reasoning: "Quota protection - fallback to local tool"
 ```
@@ -111,7 +111,7 @@ def select_tool(files, context):
     # Critical violations always route to editor
     if has_hard_violations(files, context):
         return "vscode_editor"
-    
+
     # Calculate complexity score
     complexity_score = (
         file_count_factor(len(files)) +
@@ -119,7 +119,7 @@ def select_tool(files, context):
         task_complexity_factor(context.prompt) +
         git_complexity_factor(context.git_state)
     )
-    
+
     # Quota-aware selection
     if complexity_score > 70 and quota_available("claude_code"):
         return "claude_code"
@@ -139,8 +139,8 @@ time_preferences:
   during_peak:
     prefer_local: true
     claude_threshold: 0.6  # Require higher complexity
-  
-  off_hours: "18:00-08:00"  
+
+  off_hours: "18:00-08:00"
   during_off_hours:
     claude_threshold: 0.4  # More liberal usage
 
@@ -149,7 +149,7 @@ project_rules:
   critical_paths:
     - "src/security/**"    # Always require manual review
     - "src/payment/**"     # High-stakes code
-  
+
   safe_paths:
     - "src/utils/**"       # Liberal automation OK
     - "tests/**"           # Testing code
@@ -166,22 +166,22 @@ routing_history:
     aider_local:
       simple_tasks: 0.94      # 94% success rate
       moderate_tasks: 0.78    # 78% success rate
-    
+
     claude_code:
-      moderate_tasks: 0.91    # 91% success rate  
+      moderate_tasks: 0.91    # 91% success rate
       complex_tasks: 0.87     # 87% success rate
-  
+
   user_override_patterns:
     - scenario: "migration files"
       system_choice: "aider_local"
       user_choice: "vscode_editor"
       frequency: 0.89         # User overrides 89% of time
-      
+
 # Adaptive thresholds based on success rates
 adaptive_routing:
   enabled: true
   adjustment_frequency: "weekly"
-  
+
   threshold_adjustments:
     - metric: "aider_local.moderate_tasks"
       current_success: 0.78
@@ -232,7 +232,7 @@ Balances capability with cost:
 ```bash
 # System routes complex tasks to Claude Code
 → 8 files, architecture change → claude_code
-→ 2 files, bug fix → aider_local  
+→ 2 files, bug fix → aider_local
 → 15 files, refactor → vscode_editor (too large)
 ```
 

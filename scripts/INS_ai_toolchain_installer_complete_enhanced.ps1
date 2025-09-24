@@ -109,24 +109,24 @@ function Write-Log {
         [Parameter(Mandatory = $true)][string]$Message,
         [Parameter(Mandatory = $false)][ValidateSet('DEBUG','INFO','WARNING','ERROR')][string]$Level = 'INFO'
     )
-    
+
     if ($LevelOrder[$Level] -lt $LevelOrder[$LogLevel]) { return }
-    
+
     $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     $line = "[$ts] [$Level] $Message"
-    $fg = switch ($Level) { 
-        'ERROR'   { 'Red' } 
-        'WARNING' { 'Yellow' } 
+    $fg = switch ($Level) {
+        'ERROR'   { 'Red' }
+        'WARNING' { 'Yellow' }
         'INFO'    { 'Green' }
-        default   { 'White' } 
+        default   { 'White' }
     }
-    
+
     Write-Host $line -ForegroundColor $fg
-    
+
     if (-not $DryRun) {
-        try { 
-            Add-Content -Path $Global:LogFile -Value $line -Force 
-        } catch { 
+        try {
+            Add-Content -Path $Global:LogFile -Value $line -Force
+        } catch {
             # Silently continue if logging fails
         }
     }
@@ -135,9 +135,9 @@ function Write-Log {
 function Invoke-Step {
     param([string]$Name, [scriptblock]$Action)
     Write-Log "→ $Name" 'INFO'
-    if ($DryRun) { 
+    if ($DryRun) {
         Write-Log "(dry-run) Skipped: $Name" 'DEBUG'
-        return 
+        return
     }
     try {
         & $Action
@@ -152,27 +152,27 @@ function Invoke-Step {
 # ------------------------------------------------------------
 # Env/Process helpers
 # ------------------------------------------------------------
-function Test-IsAdmin { 
+function Test-IsAdmin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     $p = New-Object Security.Principal.WindowsPrincipal($id)
-    return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) 
+    return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
 function Invoke-RefreshEnv {
     try {
-        if (Get-Command refreshenv -ErrorAction SilentlyContinue) { 
+        if (Get-Command refreshenv -ErrorAction SilentlyContinue) {
             refreshenv
-            return 
+            return
         }
         if ($env:ChocolateyInstall) {
             $chocoBin = Join-Path $env:ChocolateyInstall 'bin\refreshenv.cmd'
-            if (Test-Path $chocoBin) { 
+            if (Test-Path $chocoBin) {
                 & $chocoBin
-                return 
+                return
             }
         }
-    } catch { 
-        Write-Log "refreshenv failed: $($_.Exception.Message)" 'DEBUG' 
+    } catch {
+        Write-Log "refreshenv failed: $($_.Exception.Message)" 'DEBUG'
     }
 }
 
@@ -202,7 +202,7 @@ function Invoke-SafeCommand {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Command
-    
+
     # Safely escape arguments to prevent injection
     $escapedArgs = $Arguments | ForEach-Object {
         if ($_.Contains('"') -or $_.Contains(' ') -or $_.Contains('&') -or $_.Contains('|')) {
@@ -212,7 +212,7 @@ function Invoke-SafeCommand {
         }
     }
     $psi.Arguments = [System.String]::Join(' ', $escapedArgs)
-    
+
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -223,14 +223,14 @@ function Invoke-SafeCommand {
         $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
         $process.WaitForExit()
-        
+
         Write-Log "Output: $stdout" 'DEBUG'
-        if ($stderr -and $process.ExitCode -ne 0) { 
-            Write-Log "Error: $stderr" 'ERROR' 
+        if ($stderr -and $process.ExitCode -ne 0) {
+            Write-Log "Error: $stderr" 'ERROR'
         } elseif ($stderr) {
             Write-Log "Warning: $stderr" 'WARNING'
         }
-        
+
         return @{ Code = $process.ExitCode; Stdout = $stdout; Stderr = $stderr }
     }
     catch {
@@ -238,15 +238,15 @@ function Invoke-SafeCommand {
         throw
     }
     finally {
-        if ($process) { 
-            $process.Dispose() 
+        if ($process) {
+            $process.Dispose()
         }
     }
 }
 
 function Assert-Command([string]$Name) {
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) { 
-        throw "Command not found: $Name" 
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "Command not found: $Name"
     }
 }
 
@@ -256,11 +256,11 @@ function Assert-Command([string]$Name) {
 function Invoke-WithRetry {
     param([scriptblock]$Action, [int]$Max=3, [int]$DelaySec=5, [string]$What='operation')
     for ($i=1; $i -le $Max; $i++) {
-        try { 
-            return & $Action 
+        try {
+            return & $Action
         } catch {
-            if ($i -eq $Max) { 
-                throw "Failed $What after $Max attempts: $($_.Exception.Message)" 
+            if ($i -eq $Max) {
+                throw "Failed $What after $Max attempts: $($_.Exception.Message)"
             }
             Write-Log "Retry $i/$Max for $What: $($_.Exception.Message)" 'WARNING'
             Start-Sleep -Seconds $DelaySec
@@ -271,52 +271,52 @@ function Invoke-WithRetry {
 function Invoke-Preflight {
     Write-Log 'Running preflight checks…' 'INFO'
     $issues = @()
-    
+
     # Internet reachability
-    try { 
-        if (-not (Test-Connection -ComputerName '8.8.8.8' -Count 1 -Quiet)) { 
-            $issues += 'No basic internet connectivity' 
-        } 
+    try {
+        if (-not (Test-Connection -ComputerName '8.8.8.8' -Count 1 -Quiet)) {
+            $issues += 'No basic internet connectivity'
+        }
     } catch [System.Net.NetworkInformation.PingException] {
         $issues += 'Ping blocked; skipping connectivity check'
     } catch {
         $issues += "Connectivity test failed: $($_.Exception.Message)"
     }
-    
+
     # TLS reachability to key hosts
     foreach ($h in 'pypi.org','files.pythonhosted.org','registry.npmjs.org','api.github.com','ghcr.io','mcr.microsoft.com') {
-        try { 
-            if (-not (Test-NetConnection -ComputerName $h -Port 443 -InformationLevel Quiet)) { 
-                $issues += "Cannot reach $h:443" 
-            } 
-        } catch { 
-            $issues += "Cannot test $h:443" 
+        try {
+            if (-not (Test-NetConnection -ComputerName $h -Port 443 -InformationLevel Quiet)) {
+                $issues += "Cannot reach $h:443"
+            }
+        } catch {
+            $issues += "Cannot test $h:443"
         }
     }
-    
+
     # Disk space (≥ 5 GB free on repo drive)
     try {
         $drive = (Split-Path $RepoRoot -Qualifier) -replace ':',''
         $free  = (Get-PSDrive -Name $drive).Free
-        if ($free -lt 5GB) { 
-            $issues += 'Less than 5 GB free disk space' 
+        if ($free -lt 5GB) {
+            $issues += 'Less than 5 GB free disk space'
         }
-    } catch { 
-        Write-Log 'Disk space check failed; continuing.' 'WARNING' 
+    } catch {
+        Write-Log 'Disk space check failed; continuing.' 'WARNING'
     }
-    
+
     # Proxy hint
-    if (-not $env:HTTPS_PROXY -and -not $env:HTTP_PROXY) { 
-        Write-Log 'No HTTP(S)_PROXY set. If behind a corporate proxy, set it to avoid failures.' 'WARNING' 
+    if (-not $env:HTTPS_PROXY -and -not $env:HTTP_PROXY) {
+        Write-Log 'No HTTP(S)_PROXY set. If behind a corporate proxy, set it to avoid failures.' 'WARNING'
     }
-    
+
     if ($issues.Count -gt 0) {
         $issues | ForEach-Object { Write-Log $_ 'WARNING' }
         if (-not $Force) {
             throw "Preflight issues detected: $($issues -join '; '). Use -Force to continue anyway."
         }
     }
-    
+
     Write-Log 'Preflight OK.' 'INFO'
 }
 
@@ -326,7 +326,7 @@ function Invoke-Preflight {
 $DefaultConfig = @{
     python_version = '3.11'
     node_channel   = 'LTS'
-    install        = @{ 
+    install        = @{
         docker = $false
         ollama = $true
         aider = $true
@@ -395,8 +395,8 @@ Invoke-Step "Ensure config exists at $ConfigPath" {
     if (-not (Test-Path $ConfigPath)) {
         $json = ($DefaultConfig | ConvertTo-Json -Depth 6)
         $dir  = Split-Path -Parent $ConfigPath
-        if ($dir) { 
-            New-Item -ItemType Directory -Force -Path $dir | Out-Null 
+        if ($dir) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
         }
         Set-Content -Path $ConfigPath -Value $json -Encoding UTF8
     }
@@ -457,24 +457,24 @@ function Winget-IsInstalled([string]$id) {
     try {
         $r = Invoke-SafeCommand 'winget' @('list','--id', $id, '-e')
         return ($r.Code -eq 0) -and ($r.Stdout.Trim().Length -gt 0)
-    } catch { 
-        return $false 
+    } catch {
+        return $false
     }
 }
 
 function Winget-Install([string]$id, [string]$scope='user') {
-    if ($DryRun) { 
+    if ($DryRun) {
         Write-Log "winget install $id --scope $scope (dry-run)" 'INFO'
-        return 
+        return
     }
     Invoke-WithRetry -What "winget install $id" -Action {
         $args = @('install','--id', $id, '-e','--silent','--accept-package-agreements','--accept-source-agreements')
-        if ($scope) { 
-            $args += @('--scope', $scope) 
+        if ($scope) {
+            $args += @('--scope', $scope)
         }
         $r = Invoke-SafeCommand 'winget' $args
-        if ($r.Code -ne 0) { 
-            throw "winget($id) exit $($r.Code): $($r.Stderr.Trim())" 
+        if ($r.Code -ne 0) {
+            throw "winget($id) exit $($r.Code): $($r.Stderr.Trim())"
         }
     }
 }
@@ -483,38 +483,38 @@ Invoke-Step 'Ensure winget is available' { Assert-Command 'winget' }
 
 # Git
 Invoke-Step 'Install Git (user scope if possible)' {
-    if (-not (Winget-IsInstalled 'Git.Git')) { 
-        Winget-Install 'Git.Git' 'user' 
+    if (-not (Winget-IsInstalled 'Git.Git')) {
+        Winget-Install 'Git.Git' 'user'
     }
     Ensure-Path "$env:ProgramFiles\Git\cmd"
 }
 
 # GitHub CLI
 Invoke-Step 'Install GitHub CLI' {
-    if (-not (Winget-IsInstalled 'GitHub.cli')) { 
-        Winget-Install 'GitHub.cli' 'user' 
+    if (-not (Winget-IsInstalled 'GitHub.cli')) {
+        Winget-Install 'GitHub.cli' 'user'
     }
 }
 
 # NodeJS LTS
 Invoke-Step 'Install Node.js (LTS)' {
-    if (-not (Winget-IsInstalled 'OpenJS.NodeJS.LTS')) { 
-        Winget-Install 'OpenJS.NodeJS.LTS' 'user' 
+    if (-not (Winget-IsInstalled 'OpenJS.NodeJS.LTS')) {
+        Winget-Install 'OpenJS.NodeJS.LTS' 'user'
     }
     Ensure-Path "$env:ProgramFiles\nodejs"
 }
 
 # Python specific version (user)
 Invoke-Step ("Install Python " + $Config.python_version) {
-    $pyId = if ($Config.python_version -like '3.11*') { 
-        'Python.Python.3.11' 
-    } elseif ($Config.python_version -like '3.12*') { 
-        'Python.Python.3.12' 
-    } else { 
-        'Python.Python.3.11' 
+    $pyId = if ($Config.python_version -like '3.11*') {
+        'Python.Python.3.11'
+    } elseif ($Config.python_version -like '3.12*') {
+        'Python.Python.3.12'
+    } else {
+        'Python.Python.3.11'
     }
-    if (-not (Winget-IsInstalled $pyId)) { 
-        Winget-Install $pyId 'user' 
+    if (-not (Winget-IsInstalled $pyId)) {
+        Winget-Install $pyId 'user'
     }
 }
 
@@ -527,8 +527,8 @@ function Resolve-PyForVersion([string]$ver) {
     # Try "py -3.x" first, then python from PATH
     try {
         $r = Invoke-SafeCommand 'py' @('-' + $ver, '--version')
-        if ($r.Code -eq 0) { 
-            return @('py', '-' + $ver) 
+        if ($r.Code -eq 0) {
+            return @('py', '-' + $ver)
         }
     } catch {}
     return @('python')
@@ -547,8 +547,8 @@ $PyExe  = Join-Path $VenvPath 'Scripts\python.exe'
 $PipExe = @($PyExe,'-m','pip')
 
 Invoke-Step 'Upgrade pip/setuptools/wheel' {
-    Invoke-WithRetry -What 'pip upgrade' -Action { 
-        & $PyExe -m pip install --upgrade pip setuptools wheel 
+    Invoke-WithRetry -What 'pip upgrade' -Action {
+        & $PyExe -m pip install --upgrade pip setuptools wheel
     }
 }
 
@@ -701,13 +701,13 @@ Invoke-Step 'Ensure .env exists and is git-ignored' {
         ) -join "`n"
         Set-Content -Path $EnvPath -Value $envTemplate -Encoding UTF8
     }
-    
+
     $giLines = @('.env','.ai/logs/','.ai/.venv/','.ai/guard/')
     if (Test-Path $GitIgnore) {
         $existing = Get-Content $GitIgnore -ErrorAction SilentlyContinue
         $toAdd = $giLines | Where-Object { $_ -notin $existing }
-        if ($toAdd) { 
-            Add-Content -Path $GitIgnore -Value ($toAdd -join "`n") 
+        if ($toAdd) {
+            Add-Content -Path $GitIgnore -Value ($toAdd -join "`n")
         }
     } else {
         Set-Content -Path $GitIgnore -Value ($giLines -join "`n") -Encoding UTF8
@@ -749,10 +749,10 @@ function Login-GitHub {
 
 Invoke-Step 'GitHub CLI authentication (optional)' {
     if ($LoginGh) {
-        try { 
-            Assert-Command 'gh' 
-        } catch { 
-            throw 'gh not found after install.' 
+        try {
+            Assert-Command 'gh'
+        } catch {
+            throw 'gh not found after install.'
         }
         $st = Invoke-SafeCommand 'gh' @('auth','status')
         if ($st.Code -ne 0) {
@@ -772,12 +772,12 @@ Invoke-Step 'GitHub CLI authentication (optional)' {
 function Gh-HasCopilotExtension {
     try {
         $r = Invoke-SafeCommand 'gh' @('extension','list','--json','name,repository')
-        if ($r.Code -ne 0) { 
-            return $false 
+        if ($r.Code -ne 0) {
+            return $false
         }
         return ($r.Stdout | ConvertFrom-Json | Where-Object { $_.repository -eq 'github/gh-copilot' }) -ne $null
-    } catch { 
-        return $false 
+    } catch {
+        return $false
     }
 }
 
@@ -785,8 +785,8 @@ Invoke-Step 'Install gh-copilot extension' {
     if (-not (Gh-HasCopilotExtension)) {
         Invoke-WithRetry -What 'gh extension install github/gh-copilot' -Action {
             $r = Invoke-SafeCommand 'gh' @('extension','install','github/gh-copilot','-c','stable')
-            if ($r.Code -ne 0) { 
-                throw "gh extension install failed: $($r.Stderr.Trim())" 
+            if ($r.Code -ne 0) {
+                throw "gh extension install failed: $($r.Stderr.Trim())"
             }
         }
     }
@@ -805,17 +805,17 @@ Invoke-Step 'Ensure npm -g prefix is on PATH' {
 }
 
 Invoke-Step 'Install Claude Code (npm global)' {
-    try { 
-        Assert-Command 'npm' 
-    } catch { 
-        throw 'Node/npm not found in PATH after install.' 
+    try {
+        Assert-Command 'npm'
+    } catch {
+        throw 'Node/npm not found in PATH after install.'
     }
     $r = Invoke-SafeCommand 'npm' @('list','-g','@anthropic-ai/claude-code')
     if ($r.Stdout -notmatch '@anthropic-ai/claude-code') {
         Invoke-WithRetry -What 'npm install -g @anthropic-ai/claude-code' -Action {
             $r2 = Invoke-SafeCommand 'npm' @('install','-g','@anthropic-ai/claude-code')
-            if ($r2.Code -ne 0) { 
-                throw "npm install failed: $($r2.Stderr.Trim())" 
+            if ($r2.Code -ne 0) {
+                throw "npm install failed: $($r2.Stderr.Trim())"
             }
         }
     }
@@ -835,7 +835,7 @@ function Create-AliasesContent {
         $aliases += 'function aider-auto { param([Parameter(ValueFromRemainingArguments=$true)][object[]]$args) aider --yes @args }'
         $aliases += 'Set-Alias -Name aiderc -Value aider -Scope Global'
     }
-    
+
     $aliases += 'function claude-auto { param([Parameter(ValueFromRemainingArguments=$true)][object[]]$args) claude @args }'
     $aliases += 'function ghs { param([Parameter(ValueFromRemainingArguments=$true)][object[]]$args) gh copilot suggest @args }'
     $aliases += 'function ghe { param([Parameter(ValueFromRemainingArguments=$true)][object[]]$args) gh copilot explain @args }'
@@ -871,7 +871,7 @@ function Create-AliasesContent {
         $aliases += '  }'
         $aliases += '  git add -A; git commit -m "$Message"'
         $aliases += '}'
-        
+
         $aliases += 'function ai-explain-error {'
         $aliases += '  param([string]$Command)'
         $aliases += '  if ($Command) {'
@@ -892,16 +892,16 @@ Invoke-Step "Write configurable aliases file and add to profile ($PROFILE)" {
 
     $AliasesContent = Create-AliasesContent
     Set-Content -Path $AliasesPs1 -Value $AliasesContent -Encoding UTF8
-    
-    if (-not (Test-Path $PROFILE)) { 
-        New-Item -ItemType File -Path $PROFILE -Force | Out-Null 
+
+    if (-not (Test-Path $PROFILE)) {
+        New-Item -ItemType File -Path $PROFILE -Force | Out-Null
     }
     $prof = Get-Content -Path $PROFILE -ErrorAction SilentlyContinue
     $line = ". '$AliasesPs1'"
-    if ($prof -notcontains $line) { 
-        Add-Content -Path $PROFILE -Value $line 
+    if ($prof -notcontains $line) {
+        Add-Content -Path $PROFILE -Value $line
     }
-    
+
     Write-Log "Aliases written to $AliasesPs1 with configured features" 'INFO'
 }
 
@@ -996,8 +996,8 @@ function Install-Docker {
 
     try {
         if (-not (Winget-IsInstalled 'Docker.DockerDesktop')) {
-            if ($Admin) { 
-                Winget-Install 'Docker.DockerDesktop' 'machine' 
+            if ($Admin) {
+                Winget-Install 'Docker.DockerDesktop' 'machine'
             } else {
                 Write-Log 'Docker Desktop requires admin privileges. Please run installer manually or use winget:' 'WARNING'
                 Write-Log 'winget install --id Docker.DockerDesktop -e -h --accept-source-agreements --accept-package-agreements' 'INFO'
@@ -1016,8 +1016,8 @@ function Test-DockerReady {
     try {
         $r = Invoke-SafeCommand 'docker' @('version','--format','{{.Server.Version}}')
         return $r.Code -eq 0 -and ($r.Stdout.Trim().Length -gt 0)
-    } catch { 
-        return $false 
+    } catch {
+        return $false
     }
 }
 
@@ -1124,7 +1124,7 @@ function Add-UserToDockerGroup {
 
     try {
         $user = "$env:USERDOMAIN\$env:USERNAME"
-        
+
         # Check if docker-users group exists
         $group = Get-LocalGroup -Name "docker-users" -ErrorAction SilentlyContinue
         if (-not $group) {
@@ -1143,7 +1143,7 @@ function Add-UserToDockerGroup {
         Add-LocalGroupMember -Group "docker-users" -Member $user -ErrorAction Stop
         Write-Log "Added user to docker-users group: $user" 'INFO'
         Write-Log "Note: You may need to log out and back in for group membership to take effect" 'WARNING'
-        
+
     } catch {
         Write-Log "Could not add user to docker-users group: $($_.Exception.Message)" 'WARNING'
     }
@@ -1166,8 +1166,8 @@ function Start-DockerCompose {
     try {
         Write-Log "Launching containers via docker compose..." 'INFO'
         $r = Invoke-SafeCommand 'docker' @('compose','-f',$ComposeYml,'up','-d','--remove-orphans')
-        if ($r.Code -ne 0) { 
-            throw "docker compose up failed: $($r.Stderr.Trim())" 
+        if ($r.Code -ne 0) {
+            throw "docker compose up failed: $($r.Stderr.Trim())"
         }
 
         # Post-verify active containers
@@ -1263,9 +1263,9 @@ Invoke-Step 'Install guardrails pre-commit hook' {
         $GitHookDir = Join-Path $RepoRoot '.git\hooks'
         New-Item -ItemType Directory -Force -Path $GitHookDir | Out-Null
         Copy-Item -Path $PreCommitPath -Destination (Join-Path $GitHookDir 'pre-commit') -Force
-        try { 
-            & bash -lc "chmod +x '$(wslpath -a (Join-Path $GitHookDir 'pre-commit'))'" 
-        } catch { 
+        try {
+            & bash -lc "chmod +x '$(wslpath -a (Join-Path $GitHookDir 'pre-commit'))'"
+        } catch {
             Write-Log 'chmod +x failed; hook may not be executable on WSL/Linux.' 'WARNING'
         }
     } else {
@@ -1327,22 +1327,22 @@ Invoke-Step 'Write QUICKSTART and test_imports.py' {
 # ------------------------------------------------------------
 function Invoke-Doctor {
     Write-Log 'Doctor: verifying tools and imports…' 'INFO'
-    
+
     # Basic command checks
     $requiredCommands = @('git', 'gh', 'node', 'npm', $PyExe)
     if ($Config.install.docker) { $requiredCommands += 'docker' }
     if ($Config.install.pipx) { $requiredCommands += 'pipx' }
     if ($Config.install.aider) { $requiredCommands += 'aider' }
-    
+
     foreach($cmd in $requiredCommands){
-        try { 
-            Get-Command $cmd -ErrorAction Stop | Out-Null 
+        try {
+            Get-Command $cmd -ErrorAction Stop | Out-Null
             Write-Log "✓ Command available: $cmd" 'DEBUG'
-        } catch { 
-            Write-Log "✗ Missing command: $cmd" 'ERROR' 
+        } catch {
+            Write-Log "✗ Missing command: $cmd" 'ERROR'
         }
     }
-    
+
     # pipx health check
     if ($Config.install.pipx) {
         try {
@@ -1356,7 +1356,7 @@ function Invoke-Doctor {
             Write-Log 'pipx health check failed.' 'WARNING'
         }
     }
-    
+
     # Aider version check
     if ($Config.install.aider) {
         try {
@@ -1370,7 +1370,7 @@ function Invoke-Doctor {
             Write-Log 'Aider health check failed.' 'WARNING'
         }
     }
-    
+
     # Claude Code CLI check
     try {
         $r = Invoke-SafeCommand 'claude' @('--version')
@@ -1382,19 +1382,19 @@ function Invoke-Doctor {
     } catch {
         Write-Log 'Claude Code CLI health check failed.' 'WARNING'
     }
-    
+
     # gh auth status (only log result)
     try {
         $s = Invoke-SafeCommand 'gh' @('auth','status')
-        if ($s.Code -ne 0) { 
-            Write-Log 'gh not authenticated.' 'WARNING' 
-        } else { 
-            Write-Log 'gh authentication OK.' 'INFO' 
+        if ($s.Code -ne 0) {
+            Write-Log 'gh not authenticated.' 'WARNING'
+        } else {
+            Write-Log 'gh authentication OK.' 'INFO'
         }
-    } catch { 
-        Write-Log 'gh authentication check failed.' 'WARNING' 
+    } catch {
+        Write-Log 'gh authentication check failed.' 'WARNING'
     }
-    
+
     # gh-copilot extension check
     try {
         $r = Invoke-SafeCommand 'gh' @('extension', 'list')
@@ -1406,23 +1406,23 @@ function Invoke-Doctor {
     } catch {
         Write-Log 'gh extension check failed.' 'WARNING'
     }
-    
+
     # Python imports smoke test
-    try { 
+    try {
         & $PyExe $TestPy | ForEach-Object { Write-Log $_ 'INFO' }
-    } catch { 
-        Write-Log "Python import smoke test failed. See $TestPy." 'ERROR' 
+    } catch {
+        Write-Log "Python import smoke test failed. See $TestPy." 'ERROR'
     }
-    
+
     # Docker health check
     if ($Config.install.docker) {
         if (Test-DockerReady) {
             $r = Invoke-SafeCommand 'docker' @('ps')
-            if ($r.Code -ne 0) { 
-                Write-Log "Docker CLI error: $($r.Stderr.Trim())" 'ERROR' 
-            } else { 
-                Write-Log 'Docker daemon OK.' 'INFO' 
-                
+            if ($r.Code -ne 0) {
+                Write-Log "Docker CLI error: $($r.Stderr.Trim())" 'ERROR'
+            } else {
+                Write-Log 'Docker daemon OK.' 'INFO'
+
                 # Check if compose services are running
                 if (Test-Path $ComposeYml) {
                     $r = Invoke-SafeCommand 'docker' @('compose', '-f', $ComposeYml, 'ps')
@@ -1440,7 +1440,7 @@ function Invoke-Doctor {
             Write-Log 'Docker daemon not ready.' 'WARNING'
         }
     }
-    
+
     # WSL2 check (if configured)
     if ($Config.install.wsl2_features) {
         try {
@@ -1454,7 +1454,7 @@ function Invoke-Doctor {
             Write-Log 'WSL2 health check failed.' 'WARNING'
         }
     }
-    
+
     Write-Log 'Doctor check completed.' 'INFO'
 }
 
