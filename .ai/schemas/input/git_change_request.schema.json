@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitChangeRequest",
+  "type": "object",
+  "required": ["job_id","change_set","branch","commit","pr","policy"],
+  "properties": {
+    "job_id": { "type": "string" },
+    "change_set": {
+      "type": "object",
+      "required": ["scope","paths","description"],
+      "properties": {
+        "scope": { "type": "string", "enum": ["docs","code","infra"] },
+        "paths": { "type": "array", "items": { "type": "string" } },
+        "description": { "type": "string" }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "required": ["prefix","naming"],
+      "properties": {
+        "prefix": { "type": "string" },
+        "naming": { "type": "string" }
+      }
+    },
+    "commit": {
+      "type": "object",
+      "required": ["type","summary"],
+      "properties": {
+        "type": { "type": "string" },
+        "summary": { "type": "string" },
+        "body": { "type": "string" },
+        "footers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "required": ["title","body"],
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "draft": { "type": "boolean", "default": true },
+        "reviewers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": ["require_checks","merge","auto_merge_on_green"],
+      "properties": {
+        "require_checks": { "type": "array", "items": { "type": "string" } },
+        "merge": { "type": "string", "enum": ["squash","merge","rebase"] },
+        "auto_merge_on_green": { "type": "boolean" }
+      }
+    }
+  }
+}
