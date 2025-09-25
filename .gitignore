@@ -123,3 +123,8 @@ cli_multi_rapid_DEV_branchupdate/
 cli_multi_rapid_DEV-clean/
 temp_repo_analysis/
 combined_repo_plan.composed.json
+
+# JWT keys
+config/*.pem
+!config/*.pem.template
+
