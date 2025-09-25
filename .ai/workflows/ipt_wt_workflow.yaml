@@ -1,0 +1,30 @@
+name: "IPT-WT Parallel Development Workflow"
+version: "2.0"
+
+metadata:
+  orchestration_pattern: "ipt_wt"
+  cost_budget: 50
+
+roles:
+  ipt:
+    tools: ["ai_analyst", "ai_editor"]
+    responsibilities: ["planning", "verification", "git_operations"]
+  wt:
+    tools: ["code_fixers", "pytest_runner", "vscode_diagnostics"]
+    responsibilities: ["implementation", "testing", "documentation"]
+
+phases:
+  - id: planning
+    role: ipt
+    tasks: ["analyze_request", "create_implementation_plan", "determine_branch_strategy", "delegate_to_wt"]
+  - id: parallel_execution
+    role: wt
+    parallel: true
+    tasks: ["implement_features", "run_tests", "update_documentation"]
+  - id: verification
+    role: ipt
+    tasks: ["verify_completion", "check_acceptance_criteria", "resolve_conflicts", "prepare_merge"]
+  - id: integration
+    role: ipt
+    tasks: ["final_merge_check", "update_main_branch"]
+

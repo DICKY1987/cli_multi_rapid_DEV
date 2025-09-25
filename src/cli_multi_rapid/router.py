@@ -7,7 +7,7 @@ configured policies and step requirements.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from rich.console import Console
 
@@ -147,3 +147,68 @@ class Router:
             "ai_analyst": "vscode_diagnostics",
         }
         return mapping.get(ai_actor)
+
+    def route_with_budget_awareness(
+        self,
+        step: Dict[str, Any],
+        role: str,
+        budget_remaining: Optional[int] = None,
+    ) -> RoutingDecision:
+        """Route a step considering a budget and role preferences.
+
+        - role: 'ipt' or 'wt' (case-insensitive)
+        - budget_remaining: if None, falls back to route_step
+        """
+        try:
+            if budget_remaining is None:
+                return self.route_step(step)
+
+            role_lc = (role or "").lower()
+            if role_lc == "ipt":
+                preferred: List[str] = ["ai_analyst", "ai_editor"]
+            else:  # default to WT
+                preferred = ["code_fixers", "pytest_runner", "vscode_diagnostics"]
+
+            # Try preferred in order within budget
+            for name in preferred:
+                if not self.registry.is_available(name):
+                    continue
+                est = self.registry.estimate_cost(name, step)
+                if est <= (budget_remaining or 0):
+                    adapter = self.registry.get_adapter(name)
+                    a_type = getattr(adapter, "adapter_type", None)
+                    a_type_str = getattr(a_type, "value", "deterministic") if a_type else "deterministic"
+                    return RoutingDecision(
+                        adapter_name=name,
+                        adapter_type=a_type_str,
+                        reasoning=f"Selected {name} for role={role_lc} within budget",
+                        estimated_tokens=est,
+                    )
+
+            # If none fit budget, choose cheapest available deterministic as fallback
+            cheapest_name = None
+            cheapest_cost = None
+            for name, meta in self.adapters.items():
+                if meta.get("type") == "deterministic" and self.registry.is_available(name):
+                    est = self.registry.estimate_cost(name, step)
+                    if cheapest_cost is None or est < cheapest_cost:
+                        cheapest_name = name
+                        cheapest_cost = est
+
+            if cheapest_name:
+                return RoutingDecision(
+                    adapter_name=cheapest_name,
+                    adapter_type="deterministic",
+                    reasoning=f"Budget exceeded; using cheapest deterministic: {cheapest_name}",
+                    estimated_tokens=cheapest_cost or 0,
+                )
+
+            # Final fallback: original policy routing
+            return self.route_step(step)
+        except Exception as e:
+            return RoutingDecision(
+                adapter_name="fallback",
+                adapter_type="ai",
+                reasoning=f"Budget-aware routing failed: {e}",
+                estimated_tokens=0,
+            )
