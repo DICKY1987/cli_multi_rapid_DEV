@@ -210,3 +210,50 @@ class WorkflowRunner:
             "artifacts": [],
             "output": f"Step completed by {actor}",
         }
+
+    # --- IPT/WT integration (minimal scaffolding) ---
+    def run_ipt_wt_workflow(
+        self,
+        workflow_file: Path,
+        request: Optional[str] = None,
+        budget: Optional[int] = None,
+    ) -> WorkflowResult:
+        """Execute a lightweight IPT/WT-style workflow.
+
+        This scaffolding loads the workflow, checks structure, and performs
+        a budget-aware routing decision for a representative step without
+        executing external tools.
+        """
+        try:
+            workflow = self._load_workflow(workflow_file)
+            if not workflow:
+                return WorkflowResult(success=False, error="workflow not found")
+
+            roles = (workflow.get("roles") or {})
+            phases = (workflow.get("phases") or [])
+            if not roles or not phases:
+                return WorkflowResult(success=False, error="invalid IPT/WT workflow structure")
+
+            # Make a simple routing decision to validate configuration
+            from .router import Router
+
+            router = Router()
+            sample_step = {"actor": "ai_analyst", "with": {"analysis_type": "code_review", "detail_level": "low"}}
+            decision = router.route_with_budget_awareness(sample_step, role="ipt", budget_remaining=budget or 0)
+
+            artifact_path = Path("artifacts/ipt-wt/decision.json")
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            with artifact_path.open("w", encoding="utf-8") as f:
+                json.dump({
+                    "router_decision": {
+                        "adapter_name": decision.adapter_name,
+                        "adapter_type": decision.adapter_type,
+                        "estimated_tokens": decision.estimated_tokens,
+                        "reasoning": decision.reasoning,
+                    },
+                    "request": request,
+                }, f, indent=2)
+
+            return WorkflowResult(success=True, artifacts=[str(artifact_path)], steps_completed=len(phases))
+        except Exception as e:
+            return WorkflowResult(success=False, error=f"ipt/wt workflow error: {e}")
