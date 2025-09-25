@@ -1,0 +1,351 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rollback Contract Schema",
+  "description": "Contract for automatic rollback procedures with verification and recovery steps",
+  "type": "object",
+  "required": [
+    "rollback_version",
+    "modification_id",
+    "triggers",
+    "restoration_strategy",
+    "backup_verification",
+    "recovery_steps"
+  ],
+  "properties": {
+    "rollback_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Version of the rollback contract schema"
+    },
+    "modification_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID of the modification this rollback contract belongs to"
+    },
+    "created_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this rollback contract was created"
+    },
+    "triggers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "syntax_error",
+          "test_failure",
+          "gate_failure",
+          "security_vulnerability",
+          "user_abort",
+          "timeout",
+          "dependency_conflict",
+          "pre_state_mismatch",
+          "post_state_invalid",
+          "manual_rollback"
+        ]
+      },
+      "description": "Conditions that trigger automatic rollback"
+    },
+    "restoration_strategy": {
+      "type": "string",
+      "enum": ["git_reset_hard", "file_restore", "snapshot_restore", "hybrid"],
+      "description": "Method used for restoring previous state"
+    },
+    "backup_verification": {
+      "type": "object",
+      "required": ["enabled", "integrity_check", "pre_state_hash"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "const": true,
+          "description": "Backup verification is mandatory"
+        },
+        "integrity_check": {
+          "type": "boolean",
+          "const": true,
+          "description": "Integrity checking is mandatory"
+        },
+        "pre_state_hash": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "SHA256 hash of the pre-modification state"
+        },
+        "backup_method": {
+          "type": "string",
+          "enum": ["git_stash", "file_copy", "full_snapshot", "incremental_backup"],
+          "description": "Method used to create backup"
+        },
+        "backup_location": {
+          "type": "string",
+          "description": "Path or identifier for backup storage location"
+        },
+        "backup_size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Size of backup in bytes"
+        },
+        "checksum_verification": {
+          "type": "object",
+          "properties": {
+            "algorithm": {
+              "type": "string",
+              "enum": ["SHA256", "MD5", "SHA1"],
+              "default": "SHA256"
+            },
+            "file_checksums": {
+              "type": "object",
+              "patternProperties": {
+                "^.+$": {
+                  "type": "string",
+                  "pattern": "^[a-fA-F0-9]+$"
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "recovery_steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["step_id", "action", "verify"],
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+$",
+            "description": "Step identifier (e.g., '1.001')"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "git_reset_hard",
+              "git_stash_pop",
+              "restore_file_checksums",
+              "restore_dependencies",
+              "run_baseline_tests",
+              "verify_git_state",
+              "cleanup_artifacts",
+              "validate_restoration",
+              "notify_rollback_complete"
+            ],
+            "description": "Recovery action to perform"
+          },
+          "target": {
+            "type": "string",
+            "description": "Target for the recovery action (commit hash, file path, etc.)"
+          },
+          "verify": {
+            "type": "boolean",
+            "description": "Whether to verify this step completed successfully"
+          },
+          "verification_method": {
+            "type": "string",
+            "enum": [
+              "checksum_match",
+              "git_status_clean",
+              "tests_pass",
+              "file_exists",
+              "content_match",
+              "custom_script"
+            ],
+            "description": "Method to verify step completion"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 30,
+            "description": "Maximum time to wait for step completion"
+          },
+          "retry_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "default": 1,
+            "description": "Number of retry attempts for this step"
+          },
+          "failure_action": {
+            "type": "string",
+            "enum": ["abort", "continue", "retry", "manual_intervention"],
+            "default": "abort",
+            "description": "Action to take if step fails"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Ordered list of recovery steps to execute during rollback"
+    },
+    "validation_gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["gate_type", "verification_command"],
+        "properties": {
+          "gate_type": {
+            "type": "string",
+            "enum": [
+              "git_state_clean",
+              "baseline_tests_pass",
+              "file_integrity_check",
+              "dependency_consistency",
+              "workspace_clean"
+            ]
+          },
+          "verification_command": {
+            "type": "string",
+            "description": "Command to run for gate verification"
+          },
+          "expected_result": {
+            "type": "string",
+            "description": "Expected result from verification command"
+          },
+          "required": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether this gate must pass for rollback to be considered successful"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Validation gates to ensure successful rollback"
+    },
+    "rollback_metadata": {
+      "type": "object",
+      "properties": {
+        "max_rollback_time_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30,
+          "default": 5,
+          "description": "Maximum time allowed for complete rollback"
+        },
+        "preserve_logs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to preserve execution logs after rollback"
+        },
+        "preserve_artifacts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to preserve generated artifacts after rollback"
+        },
+        "notification_settings": {
+          "type": "object",
+          "properties": {
+            "notify_on_rollback": {
+              "type": "boolean",
+              "default": true
+            },
+            "notification_methods": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["email", "slack", "webhook", "log"]
+              }
+            },
+            "include_failure_details": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "emergency_contacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "contact_method": {
+                "type": "string",
+                "enum": ["email", "slack", "phone"]
+              },
+              "contact_info": {"type": "string"}
+            },
+            "required": ["name", "contact_method", "contact_info"]
+          },
+          "description": "Contacts to notify in case of rollback failure"
+        }
+      },
+      "additionalProperties": false
+    },
+    "risk_assessment": {
+      "type": "object",
+      "properties": {
+        "rollback_risk_level": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Assessed risk level of the rollback operation"
+        },
+        "data_loss_risk": {
+          "type": "string",
+          "enum": ["none", "minimal", "moderate", "high"],
+          "description": "Risk of data loss during rollback"
+        },
+        "service_impact": {
+          "type": "string",
+          "enum": ["none", "minimal", "moderate", "high"],
+          "description": "Expected impact on service availability"
+        },
+        "dependencies_affected": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of dependencies that may be affected by rollback"
+        },
+        "mitigation_strategies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "risk": {"type": "string"},
+              "strategy": {"type": "string"},
+              "priority": {
+                "type": "string",
+                "enum": ["low", "medium", "high"]
+              }
+            },
+            "required": ["risk", "strategy"]
+          },
+          "description": "Risk mitigation strategies"
+        }
+      },
+      "additionalProperties": false
+    },
+    "success_criteria": {
+      "type": "object",
+      "required": ["all_steps_completed", "validation_gates_passed"],
+      "properties": {
+        "all_steps_completed": {
+          "type": "boolean",
+          "const": true,
+          "description": "All recovery steps must complete successfully"
+        },
+        "validation_gates_passed": {
+          "type": "boolean",
+          "const": true,
+          "description": "All validation gates must pass"
+        },
+        "baseline_state_restored": {
+          "type": "boolean",
+          "const": true,
+          "description": "System must be restored to baseline state"
+        },
+        "no_residual_changes": {
+          "type": "boolean",
+          "const": true,
+          "description": "No residual changes from failed modification"
+        },
+        "workspace_clean": {
+          "type": "boolean",
+          "const": true,
+          "description": "Workspace must be in clean state"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

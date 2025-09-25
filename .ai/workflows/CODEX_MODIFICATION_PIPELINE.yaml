@@ -1,0 +1,341 @@
+name: "Codex 100% Accurate Modification Pipeline"
+version: "2.0.0"
+description: "Schema-driven modification pipeline with progressive validation gates and automatic rollback"
+
+inputs:
+  contract_file: "CODEX_MODIFICATION_CONTRACT.yaml"
+  modification_id: "auto-generated-uuid"
+  validation_level: "strict"
+
+policy:
+  max_tokens: 100000
+  prefer_deterministic: true
+  validation_required: true
+  rollback_on_failure: true
+  generate_attestation: true
+
+steps:
+  # Phase 1: Contract Validation & Baseline Capture
+  - id: "1.001"
+    name: "Validate Modification Contract"
+    actor: "contract_validator"
+    with:
+      contract_file: "{{ inputs.contract_file }}"
+      schema_path: ".ai/schemas/codex_modification_contract.schema.json"
+      strict_validation: true
+    emits: ["artifacts/contract_validation.json"]
+    gates:
+      - type: "schema_valid"
+        artifact: "{{ inputs.contract_file }}"
+        schema: ".ai/schemas/codex_modification_contract.schema.json"
+        required: true
+    constraints:
+      max_tokens: 1000
+      timeout_minutes: 2
+    failure_action: "abort_pipeline"
+
+  - id: "1.002"
+    name: "Capture Baseline State"
+    actor: "state_capture"
+    depends_on: ["1.001"]
+    with:
+      repository_scan: true
+      file_checksums: true
+      dependency_lock: true
+      test_baseline: true
+    emits: ["artifacts/baseline_state.json"]
+    gates:
+      - type: "baseline_integrity"
+        check: "all_files_checksummed && test_baseline_pass"
+        required: true
+    constraints:
+      timeout_minutes: 5
+    failure_action: "abort_pipeline"
+
+  - id: "1.003"
+    name: "Create Recovery Snapshot"
+    actor: "backup_manager"
+    depends_on: ["1.002"]
+    with:
+      snapshot_type: "git_stash_plus_files"
+      include_untracked: true
+      verify_backup: true
+    emits: ["artifacts/recovery_snapshot.json"]
+    gates:
+      - type: "backup_verified"
+        check: "snapshot_integrity_check_pass"
+        required: true
+
+  # Phase 2: Progressive Modification Application
+  - id: "2.001"
+    name: "Load Edit Contract Bundle"
+    actor: "bundle_loader"
+    depends_on: ["1.003"]
+    with:
+      bundle_path: "{{ contract.modifications.bundle_path }}"
+      validation_schema: "{{ contract.modifications.validation_schema }}"
+      pre_validation: true
+    emits: ["artifacts/loaded_bundle.json"]
+    gates:
+      - type: "bundle_schema_valid"
+        artifact: "{{ contract.modifications.bundle_path }}"
+        schema: "{{ contract.modifications.validation_schema }}"
+        required: true
+    failure_action: "rollback_to_snapshot"
+
+  - id: "2.002"
+    name: "Verify Pre-Modification State"
+    actor: "pre_state_verifier"
+    depends_on: ["2.001"]
+    with:
+      expected_hashes: "{{ contract.baseline.file_checksums }}"
+      git_hash: "{{ contract.baseline.repository_hash }}"
+      strict_matching: true
+    emits: ["artifacts/pre_state_verification.json"]
+    gates:
+      - type: "pre_state_match"
+        check: "all_file_hashes_match && git_hash_match"
+        required: true
+    failure_action: "abort_with_hash_mismatch_error"
+
+  - id: "2.003"
+    name: "Apply Modification Bundle"
+    actor: "enhanced_bundle_applier"
+    depends_on: ["2.002"]
+    with:
+      bundle_path: "{{ contract.modifications.bundle_path }}"
+      verification_mode: "{{ inputs.validation_level }}"
+      atomic_operations: true
+      dry_run_first: true
+    emits: ["artifacts/applied_modifications.json"]
+    gates:
+      - type: "dry_run_success"
+        check: "dry_run_completed_without_errors"
+        required: true
+      - type: "atomic_application"
+        check: "all_patches_applied_atomically"
+        required: true
+    failure_action: "rollback_to_snapshot"
+
+  # Phase 3: Progressive Validation Gates
+  - id: "3.001"
+    name: "Syntax Validation Gate"
+    actor: "syntax_validator"
+    depends_on: ["2.003"]
+    with:
+      gate_config_path: ".ai/schemas/gates/syntax_gate.schema.json"
+      languages: "{{ contract.verification_gates.syntax_check.languages }}"
+      strict_mode: true
+    emits: ["artifacts/syntax_validation.json"]
+    gates:
+      - type: "syntax_check"
+        languages: "{{ contract.verification_gates.syntax_check.languages }}"
+        failure_action: "{{ contract.verification_gates.syntax_check.failure_action }}"
+        required: true
+    constraints:
+      timeout_minutes: 5
+    failure_action: "rollback_to_snapshot"
+
+  - id: "3.002"
+    name: "Import Resolution Gate"
+    actor: "import_resolver"
+    depends_on: ["3.001"]
+    with:
+      gate_config_path: ".ai/schemas/gates/import_resolution_gate.schema.json"
+      resolution_strategies: ["static_analysis", "module_resolution"]
+      check_dependencies: true
+    emits: ["artifacts/import_resolution.json"]
+    gates:
+      - type: "import_resolution"
+        max_errors: 0
+        check_circular_imports: true
+        required: true
+    failure_action: "rollback_to_snapshot"
+
+  - id: "3.003"
+    name: "Type Checking Gate"
+    actor: "type_checker"
+    depends_on: ["3.002"]
+    with:
+      gate_config_path: ".ai/schemas/gates/type_check_gate.schema.json"
+      error_threshold: 0
+      strict_mode: true
+    emits: ["artifacts/type_check_results.json"]
+    gates:
+      - type: "type_check"
+        max_errors: 0
+        languages: "{{ contract.verification_gates.type_check.languages }}"
+        required: true
+    constraints:
+      timeout_minutes: 10
+    failure_action: "rollback_to_snapshot"
+
+  - id: "3.004"
+    name: "Security Scanning Gate"
+    actor: "security_scanner"
+    depends_on: ["3.003"]
+    with:
+      gate_config_path: ".ai/schemas/gates/security_gate.schema.json"
+      scanners: ["bandit", "safety", "semgrep"]
+      vulnerability_thresholds:
+        critical: 0
+        high: 0
+        medium: 0
+    emits: ["artifacts/security_scan.json"]
+    gates:
+      - type: "security_scan"
+        max_critical: 0
+        max_high: 0
+        scan_dependencies: true
+        required: true
+    constraints:
+      timeout_minutes: 15
+    failure_action: "rollback_to_snapshot"
+
+  # Phase 4: Comprehensive Testing
+  - id: "4.001"
+    name: "Test Suite Execution"
+    actor: "test_runner"
+    depends_on: ["3.004"]
+    with:
+      gate_config_path: ".ai/schemas/gates/test_gate.schema.json"
+      test_command: "{{ contract.baseline.test_baseline.test_command }}"
+      required_pass_rate: 100
+      coverage_threshold: "{{ contract.baseline.test_baseline.coverage_percentage }}"
+      parallel_execution: true
+    emits: ["artifacts/test_results.json"]
+    gates:
+      - type: "test_suite"
+        required_pass_rate: 100
+        coverage_threshold: "{{ contract.baseline.test_baseline.coverage_percentage }}"
+        required: true
+    constraints:
+      timeout_minutes: 20
+    failure_action: "rollback_to_snapshot"
+
+  - id: "4.002"
+    name: "Integration Testing"
+    actor: "integration_tester"
+    depends_on: ["4.001"]
+    with:
+      integration_tests: "{{ contract.verification_gates.integration_test.test_suites }}"
+      environment_setup: true
+      cleanup_after: true
+    emits: ["artifacts/integration_results.json"]
+    gates:
+      - type: "integration_test"
+        all_tests_pass: true
+        required: "{{ contract.verification_gates.integration_test.required }}"
+    constraints:
+      timeout_minutes: 30
+    failure_action: "rollback_to_snapshot"
+
+  # Phase 5: Success Verification & Attestation
+  - id: "5.001"
+    name: "Verify Success Criteria"
+    actor: "success_criteria_verifier"
+    depends_on: ["4.002"]
+    with:
+      success_criteria: "{{ contract.specification.success_criteria }}"
+      verification_method: "automated_check"
+    emits: ["artifacts/success_verification.json"]
+    gates:
+      - type: "success_criteria_met"
+        criteria: "{{ contract.specification.success_criteria }}"
+        all_must_pass: true
+        required: true
+    failure_action: "rollback_to_snapshot"
+
+  - id: "5.002"
+    name: "Generate Completion Certificate"
+    actor: "certificate_generator"
+    depends_on: ["5.001"]
+    with:
+      modification_id: "{{ inputs.modification_id }}"
+      contract_reference: "{{ inputs.contract_file }}"
+      attestation_required: true
+      include_metrics: true
+    emits: ["artifacts/completion_certificate.json"]
+    gates:
+      - type: "certificate_valid"
+        schema: ".ai/schemas/completion_certificate.schema.json"
+        digital_signature: true
+        required: true
+
+  - id: "5.003"
+    name: "Commit with Attestation"
+    actor: "git_ops"
+    depends_on: ["5.002"]
+    with:
+      message_template: |
+        feat: Codex-verified modification {{ inputs.modification_id }}
+
+        Objective: {{ contract.specification.objective }}
+        Files modified: {{ modification_stats.files_affected }}
+        Verification gates passed: {{ gates_passed_count }}/{{ total_gates }}
+
+        Contract: {{ inputs.contract_file }}
+        Bundle: {{ contract.modifications.bundle_path }}
+        Certificate: artifacts/completion_certificate.json
+
+        🤖 Generated and verified by Codex with 100% accuracy guarantee
+        📋 All verification gates passed
+        ✅ Success criteria met
+        🔒 Digitally attested
+      include_artifacts: [
+        "artifacts/completion_certificate.json",
+        "artifacts/contract_validation.json"
+      ]
+      sign_commit: true
+    emits: ["artifacts/commit_attestation.json"]
+
+# Global Configuration
+gates:
+  - type: "all_verification_gates_pass"
+    description: "All configured verification gates must pass"
+    required: true
+  - type: "success_criteria_fulfilled"
+    description: "All specified success criteria must be met"
+    required: true
+  - type: "no_security_vulnerabilities"
+    description: "No new security vulnerabilities introduced"
+    required: true
+  - type: "test_coverage_maintained"
+    description: "Code coverage maintained or improved"
+    required: true
+  - type: "digital_attestation_valid"
+    description: "Digital attestation signature valid"
+    required: true
+
+rollback:
+  triggers: [
+    "gate_failure",
+    "syntax_error",
+    "test_failure",
+    "security_vulnerability",
+    "user_abort",
+    "timeout",
+    "pre_state_mismatch"
+  ]
+  strategy: "restore_from_snapshot"
+  verification_required: true
+  cleanup_artifacts: false  # Keep artifacts for analysis
+
+cost_tracking:
+  ai_steps: ["2.003"]  # Only bundle applier uses AI
+  budget_limit: "{{ contract.cost_tracking.max_tokens }}"
+  cost_per_1k_tokens: "{{ contract.cost_tracking.cost_per_1k_tokens }}"
+  track_by_step: true
+
+monitoring:
+  telemetry_enabled: true
+  performance_metrics: true
+  gate_timing: true
+  failure_analysis: true
+  success_rate_tracking: true
+
+metadata:
+  pipeline_version: "2.0.0"
+  codex_compatibility: "v1.0+"
+  accuracy_guarantee: "100%"
+  last_updated: "2025-09-25"

@@ -1,0 +1,215 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Import Resolution Gate",
+  "description": "Verification gate for ensuring all imports and dependencies resolve correctly",
+  "type": "object",
+  "required": ["gate_type", "languages", "failure_action"],
+  "properties": {
+    "gate_type": {
+      "type": "string",
+      "const": "import_resolution"
+    },
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "python",
+          "javascript",
+          "typescript",
+          "java",
+          "go",
+          "rust",
+          "csharp",
+          "php",
+          "ruby"
+        ]
+      },
+      "description": "Programming languages to check import resolution for"
+    },
+    "resolution_tools": {
+      "type": "object",
+      "patternProperties": {
+        "^(python|javascript|typescript|java|go|rust|csharp|php|ruby)$": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Command to check import resolution"
+            },
+            "parser": {
+              "type": "string",
+              "description": "Parser or tool to use"
+            },
+            "import_paths": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Additional import paths to consider"
+            },
+            "package_files": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Package/dependency definition files"
+            }
+          },
+          "required": ["command"]
+        }
+      },
+      "description": "Language-specific import resolution tools",
+      "default": {
+        "python": {
+          "command": "python -c \"import sys; [__import__(m) for m in sys.argv[1:]]\"",
+          "parser": "python_ast",
+          "package_files": ["requirements.txt", "setup.py", "pyproject.toml"]
+        },
+        "javascript": {
+          "command": "node -e \"process.argv.slice(2).forEach(m => require(m))\"",
+          "parser": "acorn",
+          "package_files": ["package.json", "package-lock.json"]
+        },
+        "typescript": {
+          "command": "tsc --noEmit --skipLibCheck",
+          "parser": "typescript",
+          "package_files": ["package.json", "tsconfig.json"]
+        }
+      }
+    },
+    "check_strategies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "static_analysis",
+          "dynamic_import",
+          "dependency_graph",
+          "module_resolution",
+          "package_manager_check"
+        ]
+      },
+      "default": ["static_analysis", "module_resolution"],
+      "description": "Strategies to use for import resolution checking"
+    },
+    "dependency_management": {
+      "type": "object",
+      "properties": {
+        "check_installed": {
+          "type": "boolean",
+          "default": true,
+          "description": "Verify all dependencies are installed"
+        },
+        "check_versions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Verify dependency versions match requirements"
+        },
+        "allow_missing_optional": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow missing optional dependencies"
+        },
+        "update_lockfiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Update lock files if needed"
+        }
+      },
+      "additionalProperties": false
+    },
+    "import_patterns": {
+      "type": "object",
+      "properties": {
+        "include_patterns": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["src/**/*", "lib/**/*"],
+          "description": "File patterns to check imports in"
+        },
+        "exclude_patterns": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["tests/**/*", "**/*.test.*", "node_modules/**/*"],
+          "description": "File patterns to exclude from import checking"
+        },
+        "ignore_imports": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Import patterns to ignore (regex supported)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "resolution_rules": {
+      "type": "object",
+      "properties": {
+        "allow_relative_imports": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow relative imports within project"
+        },
+        "allow_implicit_imports": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow imports without explicit declarations"
+        },
+        "require_explicit_exports": {
+          "type": "boolean",
+          "default": false,
+          "description": "Require explicit export declarations"
+        },
+        "circular_import_detection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Detect and report circular imports"
+        }
+      },
+      "additionalProperties": false
+    },
+    "error_handling": {
+      "type": "object",
+      "properties": {
+        "max_resolution_errors": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum import resolution errors allowed"
+        },
+        "treat_warnings_as_errors": {
+          "type": "boolean",
+          "default": false,
+          "description": "Treat import warnings as errors"
+        },
+        "retry_failed_imports": {
+          "type": "boolean",
+          "default": true,
+          "description": "Retry failed imports with different strategies"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "default": 60,
+      "description": "Maximum time to wait for import resolution check"
+    },
+    "cache_resolution": {
+      "type": "boolean",
+      "default": true,
+      "description": "Cache import resolution results"
+    },
+    "generate_dependency_graph": {
+      "type": "boolean",
+      "default": false,
+      "description": "Generate visual dependency graph"
+    },
+    "failure_action": {
+      "type": "string",
+      "enum": ["abort_modification", "rollback", "continue_with_warning"],
+      "default": "abort_modification",
+      "description": "Action to take when import resolution fails"
+    }
+  },
+  "additionalProperties": false
+}

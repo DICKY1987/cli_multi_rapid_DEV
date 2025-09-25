@@ -1,0 +1,129 @@
+contract_version: "2.0"
+modification_id: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+timestamp: "2025-09-25T14:30:00Z"
+codex_signature: "sha256-4f4a5c2d8b9e3f1a7b2c8d5e9f0a1b3c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+
+specification:
+  objective: "Fix authentication bug in user login system and improve type safety across authentication module"
+  success_criteria:
+    - "All authentication tests pass with 100% success rate"
+    - "Type hints are present on all authentication functions"
+    - "No syntax or import errors in modified files"
+    - "Security scan shows zero critical/high vulnerabilities"
+    - "Code coverage maintained at >= 85%"
+  scope:
+    file_patterns:
+      - "src/auth/*.py"
+      - "src/models/user.py"
+      - "tests/auth/*.py"
+    function_names:
+      - "authenticate_user"
+      - "validate_password"
+      - "generate_token"
+    class_names:
+      - "UserAuthenticator"
+      - "TokenManager"
+    max_files_affected: 5
+  constraints:
+    preserve_interfaces: true
+    maintain_backwards_compatibility: true
+    forbidden_modifications:
+      - "src/auth/legacy_auth.py"  # Legacy code, do not modify
+      - "migrations/"              # Database migrations
+    required_dependencies:
+      - "bcrypt>=4.0.0"
+      - "pyjwt>=2.8.0"
+
+baseline:
+  repository_hash: "7f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e"  # pragma: allowlist secret
+  file_checksums:
+    "src/auth/authentication.py": "a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef01"  # pragma: allowlist secret
+    "src/auth/token_manager.py": "b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef012"  # pragma: allowlist secret
+    "src/models/user.py": "c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0123"  # pragma: allowlist secret
+    "tests/auth/test_auth.py": "d4e5f67890123456789abcdef0123456789abcdef01234"  # pragma: allowlist secret
+  test_baseline:
+    all_tests_pass: true
+    test_command: "pytest tests/auth/ -v --cov=src/auth --cov-report=json"
+    coverage_percentage: 87.5
+  dependency_versions:
+    bcrypt: "4.0.1"
+    pyjwt: "2.8.0"
+    pytest: "7.4.0"
+    pytest-cov: "4.1.0"
+
+modifications:
+  type: "edit_contract_bundle"
+  bundle_path: ".ai/bundles/auth-fix-a1b2c3d4.json"
+  validation_schema: ".ai/schemas/enhanced_contracts.schema.json"
+
+verification_gates:
+  - gate_type: "syntax_check"
+    required: true
+    failure_action: "abort_modification"
+    configuration:
+      timeout_seconds: 30
+      strict_mode: true
+    languages: ["python"]
+
+  - gate_type: "import_resolution"
+    required: true
+    failure_action: "abort_modification"
+    configuration:
+      timeout_seconds: 60
+      max_errors: 0
+      check_circular_imports: true
+
+  - gate_type: "type_check"
+    required: true
+    failure_action: "abort_modification"
+    configuration:
+      timeout_seconds: 120
+      error_threshold: 0
+      tool: "mypy"
+    languages: ["python"]
+
+  - gate_type: "security_scan"
+    required: true
+    failure_action: "abort_modification"
+    configuration:
+      timeout_seconds: 300
+      scanners: ["bandit", "safety"]
+      vulnerability_thresholds:
+        critical: 0
+        high: 0
+        medium: 2
+
+  - gate_type: "test_suite"
+    required: true
+    failure_action: "abort_modification"
+    configuration:
+      timeout_seconds: 600
+      test_command: "pytest tests/auth/ -v --cov=src/auth --cov-report=json"
+      required_pass_rate: 100
+      coverage_threshold: 85
+      parallel_execution: true
+
+rollback_strategy:
+  enabled: true
+  triggers:
+    - "syntax_error"
+    - "test_failure"
+    - "gate_failure"
+    - "security_vulnerability"
+    - "user_abort"
+    - "timeout"
+  restoration_method: "git_reset_hard"
+  backup_verification:
+    enabled: true
+    integrity_check: true
+
+cost_tracking:
+  max_tokens: 75000
+  cost_per_1k_tokens: 0.03
+  budget_limit_usd: 2.25
+
+metadata:
+  created_by: "codex-v2.0"
+  project_name: "user-authentication-system"
+  priority: "high"
+  estimated_duration_minutes: 15

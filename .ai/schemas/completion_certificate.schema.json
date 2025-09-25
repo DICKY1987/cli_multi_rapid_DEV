@@ -1,0 +1,365 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Codex Modification Completion Certificate",
+  "description": "Digital certificate attesting to successful completion of code modification with 100% accuracy",
+  "type": "object",
+  "required": [
+    "certificate_version",
+    "modification_id",
+    "completion_timestamp",
+    "success_criteria_met",
+    "gates_passed",
+    "test_results",
+    "code_quality_metrics",
+    "codex_attestation"
+  ],
+  "properties": {
+    "certificate_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Version of the completion certificate schema"
+    },
+    "modification_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID of the modification this certificate attests to"
+    },
+    "completion_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when modification was completed"
+    },
+    "contract_reference": {
+      "type": "object",
+      "required": ["file_path", "hash"],
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to the original modification contract"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "SHA256 hash of the contract file"
+        }
+      },
+      "additionalProperties": false
+    },
+    "success_criteria_met": {
+      "type": "boolean",
+      "const": true,
+      "description": "All success criteria from contract were met"
+    },
+    "gates_passed": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["gate_type", "status", "timestamp"],
+        "properties": {
+          "gate_type": {
+            "type": "string",
+            "enum": [
+              "syntax_check",
+              "import_resolution",
+              "type_check",
+              "test_suite",
+              "coverage_check",
+              "integration_test",
+              "security_scan",
+              "dependency_check"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "skipped"],
+            "description": "Gate execution status"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the gate was executed"
+          },
+          "execution_time_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Time taken to execute the gate in milliseconds"
+          },
+          "details": {
+            "type": "object",
+            "description": "Gate-specific execution details and metrics"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "List of verification gates that passed"
+    },
+    "test_results": {
+      "type": "object",
+      "required": ["tests_run", "tests_passed", "test_pass_rate", "coverage_percentage"],
+      "properties": {
+        "tests_run": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of tests executed"
+        },
+        "tests_passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of tests that passed"
+        },
+        "tests_failed": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of tests that failed"
+        },
+        "tests_skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of tests that were skipped"
+        },
+        "test_pass_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of tests that passed"
+        },
+        "coverage_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Code coverage percentage achieved"
+        },
+        "baseline_comparison": {
+          "type": "object",
+          "properties": {
+            "baseline_pass_rate": {"type": "number"},
+            "baseline_coverage": {"type": "number"},
+            "pass_rate_delta": {"type": "number"},
+            "coverage_delta": {"type": "number"}
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "code_quality_metrics": {
+      "type": "object",
+      "required": ["syntax_errors", "type_errors", "import_errors"],
+      "properties": {
+        "syntax_errors": {
+          "type": "integer",
+          "minimum": 0,
+          "const": 0,
+          "description": "Number of syntax errors (must be 0 for certificate)"
+        },
+        "type_errors": {
+          "type": "integer",
+          "minimum": 0,
+          "const": 0,
+          "description": "Number of type errors (must be 0 for certificate)"
+        },
+        "import_errors": {
+          "type": "integer",
+          "minimum": 0,
+          "const": 0,
+          "description": "Number of import resolution errors (must be 0 for certificate)"
+        },
+        "security_issues": {
+          "type": "object",
+          "properties": {
+            "critical": {"type": "integer", "minimum": 0, "const": 0},
+            "high": {"type": "integer", "minimum": 0, "const": 0},
+            "medium": {"type": "integer", "minimum": 0},
+            "low": {"type": "integer", "minimum": 0}
+          },
+          "required": ["critical", "high"]
+        },
+        "complexity_metrics": {
+          "type": "object",
+          "properties": {
+            "cyclomatic_complexity": {"type": "number", "minimum": 0},
+            "maintainability_index": {"type": "number", "minimum": 0, "maximum": 100},
+            "lines_of_code": {"type": "integer", "minimum": 0}
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "modification_summary": {
+      "type": "object",
+      "properties": {
+        "files_modified": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of files that were modified"
+        },
+        "lines_added": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total lines of code added"
+        },
+        "lines_removed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total lines of code removed"
+        },
+        "files_created": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of new files created"
+        },
+        "files_deleted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of files deleted"
+        },
+        "affected_modules": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of modules/packages affected by changes"
+        }
+      }
+    },
+    "performance_metrics": {
+      "type": "object",
+      "properties": {
+        "total_execution_time_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total time for modification pipeline in milliseconds"
+        },
+        "gate_execution_times": {
+          "type": "object",
+          "patternProperties": {
+            "^[a-z_]+$": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "description": "Execution time for each verification gate"
+        },
+        "resource_usage": {
+          "type": "object",
+          "properties": {
+            "max_memory_mb": {"type": "number", "minimum": 0},
+            "cpu_time_seconds": {"type": "number", "minimum": 0}
+          }
+        }
+      }
+    },
+    "cost_tracking": {
+      "type": "object",
+      "properties": {
+        "tokens_used": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total AI tokens consumed"
+        },
+        "estimated_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated cost in USD"
+        },
+        "budget_utilization_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of allocated budget used"
+        }
+      }
+    },
+    "codex_attestation": {
+      "type": "object",
+      "required": ["signature", "algorithm", "timestamp"],
+      "properties": {
+        "signature": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]+$",
+          "description": "Digital signature of the certificate"
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": ["SHA256-RSA", "SHA256-ECDSA"],
+          "description": "Signature algorithm used"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when signature was generated"
+        },
+        "public_key_fingerprint": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]+$",
+          "description": "Fingerprint of the public key used for verification"
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifacts_manifest": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["artifact_path", "hash", "size_bytes"],
+        "properties": {
+          "artifact_path": {
+            "type": "string",
+            "description": "Path to the artifact file"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$",
+            "description": "SHA256 hash of the artifact"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Size of the artifact in bytes"
+          },
+          "artifact_type": {
+            "type": "string",
+            "enum": [
+              "test_results",
+              "coverage_report",
+              "security_scan",
+              "type_check_results",
+              "contract_validation",
+              "applied_modifications",
+              "baseline_state"
+            ],
+            "description": "Type of artifact"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Manifest of all artifacts generated during modification"
+    },
+    "compliance_attestation": {
+      "type": "object",
+      "properties": {
+        "accuracy_guarantee": {
+          "type": "boolean",
+          "const": true,
+          "description": "Attestation that modification meets 100% accuracy guarantee"
+        },
+        "schema_compliance": {
+          "type": "boolean",
+          "const": true,
+          "description": "All schemas and contracts were followed"
+        },
+        "gate_compliance": {
+          "type": "boolean",
+          "const": true,
+          "description": "All required verification gates were executed and passed"
+        },
+        "rollback_capability_verified": {
+          "type": "boolean",
+          "const": true,
+          "description": "Rollback capability was tested and verified"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

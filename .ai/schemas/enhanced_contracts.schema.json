@@ -1,0 +1,467 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Enhanced Edit Contracts Bundle for Codex",
+  "description": "Extended edit contracts schema with verification gates and 100% accuracy guarantees",
+  "type": "object",
+  "required": [
+    "version",
+    "contract_id",
+    "generated_by",
+    "validation_level",
+    "patches",
+    "verification_gates"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["1.0", "2.0"]
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID linking to parent modification contract"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Key for ensuring idempotent operations"
+    },
+    "generated_by": {
+      "type": "string",
+      "pattern": "^codex-v[0-9]+\\.[0-9]+$",
+      "description": "Codex version that generated this bundle"
+    },
+    "validation_level": {
+      "type": "string",
+      "enum": ["strict", "moderate", "permissive"],
+      "default": "strict",
+      "description": "Validation strictness level"
+    },
+    "rollback_strategy": {
+      "type": "string",
+      "enum": ["automatic", "manual", "disabled"],
+      "default": "automatic",
+      "description": "How to handle rollback on failure"
+    },
+    "patches": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/patch"
+      }
+    },
+    "verification_gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/verificationGate"
+      },
+      "description": "Gates that must pass for modification to be considered successful"
+    },
+    "completion_certificate": {
+      "$ref": "#/definitions/completionCertificate"
+    }
+  },
+  "definitions": {
+    "hash": {
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      },
+      "required": ["sha256"],
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": ["path"],
+      "additionalProperties": false
+    },
+    "postAssert": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "regex_present": {
+                    "type": "object",
+                    "properties": {
+                      "pattern": {"type": "string"},
+                      "flags": {"type": "string"}
+                    },
+                    "required": ["pattern"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["regex_present"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "regex_absent": {
+                    "type": "object",
+                    "properties": {
+                      "pattern": {"type": "string"},
+                      "flags": {"type": "string"}
+                    },
+                    "required": ["pattern"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["regex_absent"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "hash_changes": {"type": "boolean"}
+                },
+                "required": ["hash_changes"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "json_pointer_exists": {"type": "string"}
+                },
+                "required": ["json_pointer_exists"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "syntax_valid": {
+                    "type": "object",
+                    "properties": {
+                      "language": {
+                        "type": "string",
+                        "enum": ["python", "javascript", "typescript", "java", "go", "rust"]
+                      }
+                    },
+                    "required": ["language"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["syntax_valid"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "imports_resolve": {"type": "boolean"}
+                },
+                "required": ["imports_resolve"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type_check_pass": {
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "enum": ["mypy", "typescript", "flow", "pyright"]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["type_check_pass"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "required": ["assert"],
+      "additionalProperties": false
+    },
+    "verificationGate": {
+      "type": "object",
+      "required": ["gate", "required"],
+      "properties": {
+        "gate": {
+          "type": "string",
+          "enum": [
+            "syntax_check",
+            "import_resolution",
+            "type_check",
+            "test_suite",
+            "coverage_check",
+            "security_scan",
+            "dependency_check",
+            "integration_test",
+            "performance_test"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "configuration": {
+          "type": "object",
+          "properties": {
+            "timeout_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1800
+            },
+            "tool": {"type": "string"},
+            "threshold": {"type": "number"},
+            "command": {"type": "string"}
+          },
+          "additionalProperties": true
+        },
+        "failure_action": {
+          "type": "string",
+          "enum": ["abort", "rollback", "continue", "retry"],
+          "default": "abort"
+        }
+      },
+      "additionalProperties": false
+    },
+    "completionCertificate": {
+      "type": "object",
+      "properties": {
+        "modification_id": {"type": "string"},
+        "completion_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "success_criteria_met": {"type": "boolean"},
+        "gates_passed": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "test_results": {
+          "type": "object",
+          "properties": {
+            "tests_run": {"type": "integer"},
+            "tests_passed": {"type": "integer"},
+            "coverage_percentage": {"type": "number"}
+          }
+        },
+        "code_quality_metrics": {
+          "type": "object",
+          "properties": {
+            "syntax_errors": {"type": "integer"},
+            "type_errors": {"type": "integer"},
+            "import_errors": {"type": "integer"},
+            "security_issues": {"type": "integer"}
+          }
+        },
+        "codex_attestation": {
+          "type": "string",
+          "pattern": "^sha256-[a-fA-F0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "patch": {
+      "oneOf": [
+        {"$ref": "#/definitions/file_ops"},
+        {"$ref": "#/definitions/unified_diff"},
+        {"$ref": "#/definitions/json_patch"},
+        {"$ref": "#/definitions/python_ast"}
+      ]
+    },
+    "file_ops": {
+      "title": "Tier 0 — file operations",
+      "type": "object",
+      "properties": {
+        "type": {"const": "file_ops"},
+        "target": {"$ref": "#/definitions/target"},
+        "ops": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "op": {"const": "create"},
+                  "content": {"type": "string"},
+                  "encoding": {"type": "string"},
+                  "eol": {
+                    "type": "string",
+                    "enum": ["lf", "crlf"]
+                  },
+                  "pre": {"$ref": "#/definitions/hash"}
+                },
+                "required": ["op", "content"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {"const": "delete"},
+                  "pre": {"$ref": "#/definitions/hash"}
+                },
+                "required": ["op"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {"const": "move"},
+                  "to": {"type": "string"},
+                  "pre": {"$ref": "#/definitions/hash"}
+                },
+                "required": ["op", "to"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {"const": "chmod"},
+                  "mode": {"type": "integer"}
+                },
+                "required": ["op", "mode"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "post": {"$ref": "#/definitions/postAssert"},
+        "on_conflict": {
+          "type": "string",
+          "enum": ["fail", "open_conflict_file"]
+        },
+        "atomic_write": {"type": "boolean"}
+      },
+      "required": ["type", "target", "ops"],
+      "additionalProperties": false
+    },
+    "unified_diff": {
+      "title": "Tier 1 — unified diff",
+      "type": "object",
+      "properties": {
+        "type": {"const": "unified_diff"},
+        "target": {"$ref": "#/definitions/target"},
+        "pre": {"$ref": "#/definitions/hash"},
+        "anchors": {
+          "type": "object",
+          "properties": {
+            "context_lines": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "diff": {"type": "string"},
+              "apply_mode": {
+                "type": "string",
+                "enum": ["strict", "fuzzy"]
+              }
+            },
+            "required": ["diff"],
+            "additionalProperties": false
+          }
+        },
+        "post": {"$ref": "#/definitions/postAssert"},
+        "on_conflict": {
+          "type": "string",
+          "enum": ["fail", "open_conflict_file"]
+        },
+        "atomic_write": {"type": "boolean"}
+      },
+      "required": ["type", "target", "pre", "ops"],
+      "additionalProperties": false
+    },
+    "json_patch": {
+      "title": "Tier 2 — JSON Patch (RFC-6902 subset)",
+      "type": "object",
+      "properties": {
+        "type": {"const": "json_patch"},
+        "target": {"$ref": "#/definitions/target"},
+        "pre": {"$ref": "#/definitions/hash"},
+        "ops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": ["add", "remove", "replace"]
+              },
+              "path": {"type": "string"},
+              "value": {}
+            },
+            "required": ["op", "path"],
+            "additionalProperties": false
+          }
+        },
+        "post": {"$ref": "#/definitions/postAssert"},
+        "on_conflict": {
+          "type": "string",
+          "enum": ["fail", "open_conflict_file"]
+        },
+        "atomic_write": {"type": "boolean"}
+      },
+      "required": ["type", "target", "pre", "ops"],
+      "additionalProperties": false
+    },
+    "python_ast": {
+      "title": "Tier 3 — Python AST via LibCST (optional)",
+      "type": "object",
+      "properties": {
+        "type": {"const": "python_ast"},
+        "target": {"$ref": "#/definitions/target"},
+        "pre": {"$ref": "#/definitions/hash"},
+        "ops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "ensure_import",
+                  "ensure_function",
+                  "insert_call_kwarg"
+                ]
+              },
+              "module": {"type": "string"},
+              "alias": {
+                "type": ["string", "null"]
+              },
+              "name": {"type": "string"},
+              "signature": {"type": "string"},
+              "body": {"type": "string"},
+              "selector": {"type": "object"},
+              "arg": {"type": "string"},
+              "value": {"type": "string"}
+            },
+            "required": ["op"],
+            "additionalProperties": true
+          }
+        },
+        "post": {"$ref": "#/definitions/postAssert"},
+        "on_conflict": {
+          "type": "string",
+          "enum": ["fail", "open_conflict_file"]
+        },
+        "atomic_write": {"type": "boolean"}
+      },
+      "required": ["type", "target", "pre", "ops"],
+      "additionalProperties": false
+    }
+  }
+}

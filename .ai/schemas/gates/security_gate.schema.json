@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Security Scan Gate",
+  "description": "Verification gate for security vulnerability scanning and analysis",
+  "type": "object",
+  "required": ["gate_type", "scanners", "failure_action"],
+  "properties": {
+    "gate_type": {
+      "type": "string",
+      "const": "security_scan"
+    },
+    "scanners": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "command"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "bandit",
+              "semgrep",
+              "eslint-security",
+              "gosec",
+              "cargo-audit",
+              "snyk",
+              "safety",
+              "pip-audit",
+              "npm-audit",
+              "sonarqube"
+            ]
+          },
+          "command": {
+            "type": "string",
+            "description": "Command to run the security scanner"
+          },
+          "config_file": {
+            "type": "string",
+            "description": "Path to scanner configuration file"
+          },
+          "severity_levels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["critical", "high", "medium", "low", "info"]
+            },
+            "default": ["critical", "high", "medium"],
+            "description": "Severity levels to check for"
+          },
+          "exclude_rules": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Security rule IDs to exclude"
+          }
+        }
+      },
+      "description": "Security scanners to run"
+    },
+    "vulnerability_thresholds": {
+      "type": "object",
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum critical vulnerabilities allowed"
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum high severity vulnerabilities allowed"
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5,
+          "description": "Maximum medium severity vulnerabilities allowed"
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 10,
+          "description": "Maximum low severity vulnerabilities allowed"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Maximum allowed vulnerabilities by severity level"
+    },
+    "scan_scope": {
+      "type": "object",
+      "properties": {
+        "include_patterns": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["src/**/*", "lib/**/*", "app/**/*"],
+          "description": "File patterns to include in security scanning"
+        },
+        "exclude_patterns": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": [
+            "tests/**/*",
+            "test/**/*",
+            "node_modules/**/*",
+            "vendor/**/*",
+            "*.test.*",
+            "*.spec.*"
+          ],
+          "description": "File patterns to exclude from security scanning"
+        },
+        "scan_dependencies": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include dependency vulnerability scanning"
+        },
+        "scan_secrets": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scan for exposed secrets and credentials"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency_scanning": {
+      "type": "object",
+      "properties": {
+        "package_managers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["npm", "pip", "maven", "gradle", "composer", "gem", "cargo", "go-mod"]
+          },
+          "description": "Package managers to scan for vulnerable dependencies"
+        },
+        "vulnerability_databases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["nvd", "github", "snyk", "osv", "safety-db"]
+          },
+          "default": ["nvd", "github"],
+          "description": "Vulnerability databases to check against"
+        },
+        "update_databases": {
+          "type": "boolean",
+          "default": true,
+          "description": "Update vulnerability databases before scanning"
+        }
+      },
+      "additionalProperties": false
+    },
+    "secrets_scanning": {
+      "type": "object",
+      "properties": {
+        "entropy_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.6,
+          "description": "Entropy threshold for secret detection"
+        },
+        "secret_patterns": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Custom regex patterns for secret detection"
+        },
+        "exclude_files": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["*.lock", "*.log", "*.md"],
+          "description": "File patterns to exclude from secret scanning"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1800,
+      "default": 600,
+      "description": "Maximum time to wait for security scan"
+    },
+    "parallel_execution": {
+      "type": "boolean",
+      "default": true,
+      "description": "Run security scanners in parallel"
+    },
+    "generate_report": {
+      "type": "boolean",
+      "default": true,
+      "description": "Generate detailed security report"
+    },
+    "report_formats": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["json", "sarif", "xml", "csv", "html"]
+      },
+      "default": ["json", "sarif"],
+      "description": "Formats for security report"
+    },
+    "failure_action": {
+      "type": "string",
+      "enum": ["abort_modification", "rollback", "continue_with_warning"],
+      "default": "abort_modification",
+      "description": "Action to take when security issues are found"
+    },
+    "baseline_file": {
+      "type": "string",
+      "description": "Path to security baseline file for comparison"
+    },
+    "suppress_existing": {
+      "type": "boolean",
+      "default": false,
+      "description": "Suppress security issues that exist in baseline"
+    }
+  },
+  "additionalProperties": false
+}
