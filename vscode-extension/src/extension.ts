@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
+import { openCockpitPanel } from './webview';
+let extContext: vscode.ExtensionContext | undefined;
 
 let webSocketClient: any;
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('CLI Multi-Rapid extension is now active!');
+    extContext = context;
 
     // Register commands
     const commands = [
@@ -29,7 +32,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 async function openCockpit() {
     try {
-        vscode.window.showInformationMessage('Opening CLI Multi-Rapid Workflow Cockpit...');
+        if (extContext) {
+            const panel = openCockpitPanel(extContext);
+            const cfg = vscode.workspace.getConfiguration('cliMultiRapid');
+            const serverUrl = cfg.get<string>('serverUrl', 'http://localhost:8000');
+            const wsUrl = serverUrl.replace(/^http(s?):\/\//, 'ws$1://') + '/ws';
+            panel.webview.postMessage({ type: 'config', serverUrl, wsUrl });
+        } else {
+            vscode.window.showInformationMessage('CLI Multi-Rapid Cockpit (context unavailable)');
+        }
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to open cockpit: ${error}`);
     }
