@@ -1,27 +1,27 @@
-# EAFIX Trading System
+# CLI Orchestrator
 
-![CI](https://github.com/DICKY1987/eafix-modular/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/DICKY1987/cli_multi_rapid_DEV/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/badge/coverage-80%25%2B-brightgreen)
 
-**EAFIX Trading System** is a production-ready trading platform that combines Python intelligence with MT4 execution power. The system features advanced Guardian protection mechanisms, sophisticated signal generation, and comprehensive risk management for professional forex trading.
+**CLI Orchestrator** is a deterministic, schema-driven CLI orchestrator that stitches together multiple developer tools and AI agents into predefined, auditable workflows. It prioritizes scripts first, escalates to AI only where judgment is required, and emits machine-readable artifacts with gates and verification at every hop.
 
-The platform is designed for traders who demand reliability, performance, and intelligent automation in their trading operations.
+The platform is designed for developers who need reliable, cost-aware automation in their development workflows.
 
 ## Quick start
 
-You can run the trading system CLI directly with the Python interpreter without any
+You can run the CLI orchestrator directly with the Python interpreter without any
 installation steps. The examples below assume you are executing commands in
 the repository root.
 
 ```bash
-# Check trading system status
-python -m eafix.apps.cli.main status
+# Run a workflow with dry-run
+cli-orchestrator run .ai/workflows/PY_EDIT_TRIAGE.yaml --files "src/**/*.py" --lane lane/ai-coding/fix-imports --dry-run
 
-# View active trading signals
-python -m eafix.apps.cli.main trade signals --active
+# Execute workflow
+cli-orchestrator run .ai/workflows/PY_EDIT_TRIAGE.yaml --files "src/**/*.py"
 
-# Monitor Guardian protection system
-python -m eafix.apps.cli.main guardian status
+# Verify an artifact against schema
+cli-orchestrator verify artifacts/diagnostics.json --schema .ai/schemas/diagnostics.schema.json
 ```
 
 If you prefer to install the package into your current environment, you can
@@ -30,73 +30,80 @@ required to run the examples above:
 
 ```bash
 pip install -e .
-eafix status
+cli-orchestrator run .ai/workflows/CODE_QUALITY.yaml
 ```
 
 The editable install will register a console script entry point named
-`eafix`. This provides access to all trading system functionality through
+`cli-orchestrator`. This provides access to all workflow orchestration functionality through
 a unified command-line interface.
 
-## Trading System Features
+## Core Features
 
-The EAFIX system provides comprehensive trading functionality:
+The CLI Orchestrator provides comprehensive workflow automation:
 
-**Core Trading Operations:**
-- Real-time signal generation and analysis
-- MT4 integration for order execution
-- Advanced risk management and position sizing
-- Multi-timeframe technical analysis
+**Core Orchestration:**
+- Schema-validated YAML workflow definitions
+- Deterministic tool execution with AI escalation
+- Cost tracking and budget enforcement
+- Machine-readable artifact generation
 
-**Guardian Protection System:**
-- Automated risk monitoring and intervention
-- Account protection mechanisms
-- Emergency position closure capabilities
-- Drawdown and exposure limits
-
-**System Management:**
-- Health monitoring and diagnostics
-- Configuration management
-- Performance analytics and reporting
-- Integration with external services (Slack, Teams, Jira)
+**Architecture & Development:**
+- **Single Main Branch**: Simplified development flow with `main` as the sole source of truth
+- Clean, consolidated codebase with all features merged
+- Automated CI/CD with comprehensive testing
+- Comprehensive GitHub integration for repository management
+**Adapter Framework:**
+- Unified interface for tools and AI services
+- Router system for step execution
+- Gate system for verification and quality control
+- Comprehensive GitHub integration and repository management
 
 **Command Examples:**
 ```bash
-# Trading operations
-eafix trade signals --symbol EURUSD --export
-eafix trade positions --active
+# Workflow operations
+cli-orchestrator run .ai/workflows/PY_EDIT_TRIAGE.yaml --files "src/**/*.py"
+cli-orchestrator run .ai/workflows/CODE_QUALITY.yaml --dry-run
 
-# Guardian system
-eafix guardian enable --max-drawdown 5.0
-eafix guardian rules --list
+# Verification and validation
+cli-orchestrator verify artifacts/diagnostics.json --schema .ai/schemas/diagnostics.schema.json
+cli-orchestrator cost report --last-run
 
-# System management
-eafix system health --detailed
-eafix analyze performance --period 30d
+# GitHub integration
+cli-orchestrator run .ai/workflows/GITHUB_REPO_ANALYSIS.yaml --repo owner/repo
+cli-orchestrator run .ai/workflows/GITHUB_ISSUE_AUTOMATION.yaml --repo owner/repo
 ```
 
 ## Architecture Overview
 
-The EAFIX Trading System follows a modular architecture designed for reliability and maintainability:
+The CLI Orchestrator follows a modular architecture designed for reliability and maintainability:
 
 **Core Components:**
-- `src/eafix/` - Main trading system with signal generation, indicators, and system management
-- `src/contracts/` - Trading data models (Signal, PriceTick, OrderIntent, etc.)
-- `src/integrations/` - External service connectors (GitHub, Slack, Teams, Jira)
-- `src/websocket/` - Event broadcasting and real-time communication
-- `src/compliance/` - Regulatory compliance and reporting
+- `src/cli_multi_rapid/` - Core orchestrator implementation with workflow runner and router
+- `.ai/workflows/` - YAML workflow definitions (schema-validated)
+- `.ai/schemas/` - JSON Schema definitions for validation
+- `adapters/` - Tool and AI adapter implementations
+- `artifacts/` - Workflow execution artifacts (patches, reports)
 
 **Key Modules:**
-- **Signal Processing**: Advanced technical analysis and pattern recognition
-- **Guardian System**: Risk management and account protection
-- **MT4 Integration**: Direct broker connectivity and order execution
-- **Event System**: WebSocket-based real-time updates
-- **Health Monitoring**: System diagnostics and performance tracking
+- **Workflow Runner**: Executes schema-validated YAML workflows
+- **Router System**: Routes steps between deterministic tools and AI adapters
+- **Adapter Framework**: Unified interface for tools and AI services
+- **Cost Tracker**: Token usage and budget enforcement
+- **Gate System**: Verification and quality gates
 
-## Tool Registry and Event Bus
+## Development & Branch Structure
 
-- Tool registry: define tools in `config/tools.yaml`.
-- Probe tools and write health snapshot: `python scripts/ipt_tools_ping.py` → `state/tool_health.json`.
-- Event bus (FastAPI + WebSocket): `uvicorn services.event_bus.main:app --reload` then publish JSON to `POST /publish`; subscribers connect to `/ws`.
+**Simplified Branch Model:**
+- **Single `main` branch**: All development happens on the main branch
+- **Clean history**: Repository consolidated from multiple development branches
+- **Feature development**: Use short-lived feature branches that merge to main quickly
+- **No long-running branches**: Eliminates complexity and merge conflicts
+
+**Repository Organization:**
+- Tool registry: define tools in `config/tools.yaml`
+- Workflow definitions: `.ai/workflows/*.yaml` (schema-validated)
+- Adapters: `src/cli_multi_rapid/adapters/` for tool integrations
+- Schemas: `.ai/schemas/` for validation and artifact structure
 
 Hooks setup
 
@@ -137,17 +144,17 @@ pytest -q --cov=src --cov-report=term-missing --cov-fail-under=80
 
 | Path                       | Purpose                                                 |
 |---------------------------|---------------------------------------------------------|
-| `src/eafix/`            | Core trading system with CLI, signals, and indicators   |
-| `src/contracts/`        | Trading data models and type definitions                |
-| `src/integrations/`     | External service connectors and APIs                    |
-| `src/websocket/`        | Real-time event broadcasting system                      |
-| `src/compliance/`       | Regulatory compliance and reporting                      |
-| `tests/`               | Comprehensive unit and integration tests                 |
-| `config/`              | System configuration files (YAML, JSON schemas)         |
-| `scripts/`             | Setup, deployment, and utility scripts                  |
-| `docs/`                | Trading system documentation                             |
-| `workflows/`           | Multi-stream workflow definitions                        |
-| `.github/workflows`    | CI/CD pipelines for automated testing and deployment    |
+| `src/cli_multi_rapid/`     | Core orchestrator implementation with workflow runner   |
+| `.ai/workflows/`           | YAML workflow definitions (schema-validated)            |
+| `.ai/schemas/`             | JSON Schema definitions for validation                   |
+| `adapters/`                | Tool and AI adapter implementations                      |
+| `artifacts/`               | Workflow execution artifacts (patches, reports)         |
+| `tests/`                   | Comprehensive unit and integration tests                 |
+| `config/`                  | System configuration files (YAML, JSON schemas)         |
+| `scripts/`                 | Setup, deployment, and utility scripts                  |
+| `docs/`                    | CLI Orchestrator documentation                           |
+| `cost/`                    | Token usage tracking and budget reports                 |
+| `.github/workflows`        | CI/CD pipelines for automated testing and deployment    |
 
 ## Contributing
 
