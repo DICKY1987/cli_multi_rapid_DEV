@@ -1,4 +1,4 @@
-# EAFIX Trading System
+﻿# EAFIX Trading System
 
 ![CI](https://github.com/DICKY1987/eafix-modular/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/badge/coverage-80%25%2B-brightgreen)
@@ -95,7 +95,7 @@ The EAFIX Trading System follows a modular architecture designed for reliability
 ## Tool Registry and Event Bus
 
 - Tool registry: define tools in `config/tools.yaml`.
-- Probe tools and write health snapshot: `python scripts/ipt_tools_ping.py` → `state/tool_health.json`.
+- Probe tools and write health snapshot: `python scripts/ipt_tools_ping.py` â†’ `state/tool_health.json`.
 - Event bus (FastAPI + WebSocket): `uvicorn services.event_bus.main:app --reload` then publish JSON to `POST /publish`; subscribers connect to `/ws`.
 
 Hooks setup
@@ -114,7 +114,7 @@ that installs common development tools such as `pre-commit`, `ruff` and
 they are preconfigured so that continuous integration (CI) pipelines can
 enforce formatting, linting, static type checking and unit test execution.
 
-To run the test suite locally using the built‑in Python `unittest` runner:
+To run the test suite locally using the builtâ€‘in Python `unittest` runner:
 
 ```bash
 python -m unittest discover -s tests -v

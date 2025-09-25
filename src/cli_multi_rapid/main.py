@@ -144,7 +144,39 @@ def cost_report(
         console.print(table)
     except ImportError:
         console.print("[red]CLI orchestrator cost tracker not available[/red]")
-        console.print("[yellow]Cost tracking requires full installation[/yellow]")
+    console.print("[yellow]Cost tracking requires full installation[/yellow]")
+
+
+@app.command("run-ipt-wt")
+def run_ipt_wt(
+    workflow_file: Path = typer.Argument(
+        Path(".ai/workflows/ipt_wt_workflow.yaml"), help="Path to IPT/WT workflow YAML"
+    ),
+    request: Optional[str] = typer.Option(None, "--request", help="User request/brief"),
+    budget: Optional[int] = typer.Option(
+        None, "--budget", help="Budget remaining (token estimate)"
+    ),
+):
+    """Run the IPT/WT workflow scaffolding with budget-aware routing.
+
+    Produces an artifact at artifacts/ipt-wt/decision.json documenting the routing decision.
+    """
+    console.print(f"[bold blue]Running IPT/WT workflow:[/bold blue] {workflow_file}")
+    try:
+        from .workflow_runner import WorkflowRunner
+
+        runner = WorkflowRunner()
+        result = runner.run_ipt_wt_workflow(workflow_file=workflow_file, request=request, budget=budget)
+        if result.success:
+            console.print("[green]IPT/WT workflow completed successfully[/green]")
+            if result.artifacts:
+                console.print(f"[dim]Artifacts: {', '.join(result.artifacts)}[/dim]")
+        else:
+            console.print(f"[red]IPT/WT workflow failed: {result.error}[/red]")
+            raise typer.Exit(code=1)
+    except ImportError:
+        console.print("[red]Workflow runner not available[/red]")
+        raise typer.Exit(code=1)
 
 
 # Tools command group
