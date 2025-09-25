@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: cli-orchestrator
-Version: 1.0.0
+Version: 1.1.0
 Summary: CLI Orchestrator - Deterministic, schema-driven CLI orchestrator for developer tools and AI agents
 Author-email: CLI Orchestrator Team <dev@cli-orchestrator.com>
 License: MIT
