@@ -1,0 +1,75 @@
+taskspec_version: '1.0'
+name: Complete Next Steps Plan
+description: Execute follow-up tasks after MOD integrations (tests, planner, cockpit)
+
+global_policies:
+  execution_mode: sequential_with_validation
+  rollback_on_failure: false
+  validation_gates: true
+
+phases:
+  - id: phase_fix_security_imports
+    title: Fix security imports for tests
+    goals:
+      - Resolve NameError in security/auth imports
+    acceptance:
+      - Pytest no longer fails on missing List
+    actions:
+      - type: files
+        note: Applied in repo (src/cli_multi_rapid/security/auth.py)
+
+  - id: phase_run_core_tests
+    title: Run core tests locally
+    goals:
+      - Validate core suite runs
+    acceptance:
+      - Pytest exits successfully for core subset
+    actions:
+      - type: tests
+        suite: core
+        paths:
+          - tests
+          - --maxfail=1
+          - --ignore=tests/benchmarks
+
+  - id: phase_planner_cost_integration
+    title: Integrate cost-aware planner entry points
+    goals:
+      - Make cost-aware tool selection available to orchestrations
+    acceptance:
+      - lib/planner_cost_model functions callable from workflows
+    actions:
+      - type: docs
+        path: docs/planner_costs.md
+      - type: expose
+        module: lib.planner_cost_model
+        functions:
+          - select_tool_for_capability
+          - estimate_plan_cost
+
+  - id: phase_cockpit_ws_subscribe
+    title: VS Code cockpit subscribes to event bus
+    goals:
+      - Cockpit connects to WS and logs events
+    acceptance:
+      - Webview shows Connected and prints received messages
+    actions:
+      - type: vscode
+        path: vscode-extension/src/extension.ts
+      - type: vscode
+        path: vscode-extension/media/app.js
+
+  - id: phase_validate_event_bus
+    title: Validate event bus roundtrip
+    goals:
+      - Publish sample event; observe in cockpit or recent endpoint
+    acceptance:
+      - /events/recent shows the event payload
+    actions:
+      - type: run
+        cmd: python - <<PY
+          import json, urllib.request
+          req=urllib.request.Request('http://127.0.0.1:8000/publish',data=json.dumps({'type':'phase.progress','pct':1}).encode('utf-8'),headers={'Content-Type':'application/json'},method='POST')
+          print(urllib.request.urlopen(req, timeout=2.0).read())
+        PY
+

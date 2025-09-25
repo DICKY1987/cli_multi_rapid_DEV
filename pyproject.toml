@@ -61,6 +61,7 @@ test = [
     "pytest-cov>=4.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-mock>=3.10.0",
+    "pytest-timeout>=2.1.0",
     "httpx>=0.24.0",
 ]
 
@@ -90,18 +91,18 @@ python_functions = ["test_*"]
 [tool.black]
 line-length = 88
 target-version = ['py39', 'py310', 'py311']
-include = '\.pyi?$'
+include = '\\.(pyi)?$'
 extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
+/(\
+  # directories\
+  \\.eggs\
+  | \\.git\
+  | \\.hg\
+  | \\.mypy_cache\
+  | \\.tox\
+  | \\.venv\
+  | build\
+  | dist\
 )/
 '''
 
@@ -158,3 +159,4 @@ ignore_missing_imports = true
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101", "B601"]
+

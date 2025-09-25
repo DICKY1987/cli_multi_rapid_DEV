@@ -49,6 +49,7 @@ def main() -> int:
     state_dir = root / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     out_path = state_dir / "tool_health.json"
+    history_path = state_dir / "tool_health_history.jsonl"
 
     cfg = load_tools_cfg(cfg_path)
     tools = cfg.get("tools", [])
@@ -77,10 +78,17 @@ def main() -> int:
 
     with out_path.open("w", encoding="utf-8") as f:
         json.dump({"tools": results}, f, indent=2)
+    # Append to history (one line per tool record)
+    try:
+        with history_path.open("a", encoding="utf-8") as hf:
+            for rec in results:
+                hf.write(json.dumps(rec) + "\n")
+    except Exception:
+        # Best-effort; avoid failing the command due to history writes
+        pass
     print(str(out_path))
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
