@@ -1,0 +1,109 @@
+name: "AI-Powered Code Analysis and Editing Demo"
+description: "Demonstrates AI adapters for code analysis, planning, and editing"
+
+inputs:
+  files: ["src/**/*.py"]
+  lane: "lane/ai-coding/demo"
+
+policy:
+  max_tokens: 50000
+  prefer_deterministic: false  # Enable AI adapters
+  budget_limit_usd: 5.00
+
+steps:
+
+  - id: "0.001"
+    name: "Estimate AI Cost"
+    actor: cost_estimator
+    with:
+      workflow: ".ai/workflows/AI_WORKFLOW_DEMO.yaml"
+    emits: ["artifacts/ai-cost.json"]
+  - id: "1.001"
+    name: "Initial Code Review"
+    actor: ai_analyst
+    with:
+      analysis_type: "code_review"
+      focus_areas: ["quality", "bugs", "maintainability"]
+      detail_level: "medium"
+      model: "claude-3-5-sonnet-20241022"
+    emits: ["artifacts/ai-code-review.json"]
+
+  - id: "1.002"
+    name: "Architecture Analysis"
+    actor: ai_analyst
+    with:
+      analysis_type: "architecture_analysis"
+      detail_level: "high"
+      model: "claude-3-5-sonnet-20241022"
+    emits: ["artifacts/ai-architecture-analysis.json"]
+    when: "artifacts/ai-code-review.json exists"
+
+  - id: "2.001"
+    name: "Refactor Planning"
+    actor: ai_analyst
+    with:
+      analysis_type: "refactor_planning"
+      focus_areas: ["maintainability", "testability"]
+      model: "claude-3-5-sonnet-20241022"
+    emits: ["artifacts/ai-refactor-plan.json"]
+    when: "artifacts/ai-architecture-analysis.json exists"
+
+  - id: "3.001"
+    name: "AI-Powered Code Improvements"
+    actor: ai_editor
+    with:
+      tool: "aider"
+      operation: "refactor"
+      prompt: |
+        Based on the analysis in artifacts/ai-refactor-plan.json,
+        implement the highest priority refactoring suggestions.
+        Focus on:
+        1. Extracting complex methods
+        2. Improving type hints
+        3. Adding docstrings where missing
+        4. Simplifying conditional logic
+      model: "claude-3-5-sonnet-20241022"
+      max_tokens: 8000
+    emits: ["artifacts/ai-improvements.json"]
+    when: "artifacts/ai-refactor-plan.json exists"
+
+  - id: "4.001"
+    name: "Test Planning for Changes"
+    actor: ai_analyst
+    with:
+      analysis_type: "test_planning"
+      detail_level: "high"
+      model: "claude-3-5-sonnet-20241022"
+    emits: ["artifacts/ai-test-plan.json"]
+    when: "artifacts/ai-improvements.json exists"
+
+gates:
+
+  - type: token_budget
+    description: "Enforce budget limit for AI steps"
+    tokens_file: "artifacts/ai-cost.json"
+    max_tokens: 50000
+    max_usd: 5.00
+
+  - type: tests_pass
+    description: "Ensure all tests still pass after AI improvements"
+    source: "artifacts/test-results.json"
+
+  - type: diff_limits
+    description: "Limit scope of AI changes"
+    max_files: 10
+    max_lines: 500
+
+  - type: schema_valid
+    description: "Validate all AI artifacts"
+    artifacts:
+      - "artifacts/ai-code-review.json"
+      - "artifacts/ai-architecture-analysis.json"
+      - "artifacts/ai-refactor-plan.json"
+      - "artifacts/ai-test-plan.json"
+
+metadata:
+  created_by: "CLI Orchestrator AI Demo"
+  workflow_type: "ai_analysis_and_editing"
+  estimated_duration: "15-30 minutes"
+  requires_human_review: true

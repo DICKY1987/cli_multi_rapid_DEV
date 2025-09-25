@@ -1,0 +1,207 @@
+{
+  "schema": "completion_roadmap_v3",
+  "phases": [
+    {
+      "id": "A",
+      "name": "Foundation Stabilization",
+      "duration_weeks": [
+        1,
+        2
+      ],
+      "goal": "Resolve blockers; establish reliable CI and local dev loop",
+      "tasks": [
+        {
+          "id": "A-1",
+          "title": "Stand up CI matrix for Python/TS/MQL4",
+          "deps": [],
+          "estimate_h": 10,
+          "artifacts": [
+            "workflows/**"
+          ],
+          "quality_gates": [
+            "lint",
+            "type",
+            "unit",
+            "secscan",
+            "build"
+          ]
+        },
+        {
+          "id": "A-2",
+          "title": "Lock dependencies & env parity",
+          "deps": [
+            "A-1"
+          ],
+          "estimate_h": 6,
+          "artifacts": [
+            "pyproject.toml",
+            "requirements.txt",
+            "package.json",
+            "pnpm-lock.yaml",
+            ".env.template"
+          ]
+        },
+        {
+          "id": "A-3",
+          "title": "Taskfile orchestration commands",
+          "deps": [
+            "A-1"
+          ],
+          "estimate_h": 5,
+          "artifacts": [
+            "Taskfile.yml"
+          ],
+          "quality_gates": [
+            "task ci=0",
+            "task local=0"
+          ]
+        },
+        {
+          "id": "A-4",
+          "title": "Secrets policy & scans",
+          "deps": [],
+          "estimate_h": 4,
+          "artifacts": [
+            ".secrets.baseline",
+            ".pre-commit-config.yaml"
+          ]
+        },
+        {
+          "id": "A-5",
+          "title": "Smoke E2E via docker-compose",
+          "deps": [
+            "A-2",
+            "A-3"
+          ],
+          "estimate_h": 6,
+          "artifacts": [
+            "docker-compose.yml"
+          ],
+          "quality_gates": [
+            "/healthz==200"
+          ]
+        }
+      ],
+      "quality_gates": {
+        "coverage_core_min": 0.8,
+        "critical_vulns": 0,
+        "ci_pass_rate_min": 0.95
+      }
+    },
+    {
+      "id": "B",
+      "name": "Core Feature Development",
+      "duration_weeks": [
+        2,
+        4
+      ],
+      "goal": "Implement missing core workflows across CLI/GUI/VS Code",
+      "tasks": [
+        {
+          "id": "B-1",
+          "title": "CLI→VSCode extension parity and shared contracts",
+          "deps": [
+            "A-3"
+          ],
+          "estimate_h": 16,
+          "artifacts": [
+            "vscode-extension/**",
+            "githubSave.ts",
+            "INTERFACE_GUIDE.md"
+          ]
+        },
+        {
+          "id": "B-2",
+          "title": "GUI (Python) integration with CLI orchestration",
+          "deps": [
+            "A-3"
+          ],
+          "estimate_h": 18,
+          "artifacts": [
+            "CLI_PY_GUI/**",
+            "server.py"
+          ]
+        },
+        {
+          "id": "B-3",
+          "title": "LangGraph orchestration bridge",
+          "deps": [
+            "A-3"
+          ],
+          "estimate_h": 10,
+          "artifacts": [
+            "langgraph_cli.py",
+            "langgraph_git_integration.py"
+          ]
+        },
+        {
+          "id": "B-4",
+          "title": "Contract & integration tests",
+          "deps": [
+            "A-5"
+          ],
+          "estimate_h": 14,
+          "artifacts": [
+            "tests/**",
+            "contracts/**"
+          ]
+        }
+      ],
+      "quality_gates": {
+        "coverage_core_min": 0.9,
+        "sec_findings_high": 0,
+        "acceptance_tests_pass": true
+      }
+    },
+    {
+      "id": "C",
+      "name": "Production Readiness",
+      "duration_weeks": [
+        2,
+        3
+      ],
+      "goal": "Harden deployment, security, and observability",
+      "tasks": [
+        {
+          "id": "C-1",
+          "title": "K8s manifests validated + rollout/rollback",
+          "deps": [
+            "B-4"
+          ],
+          "estimate_h": 12,
+          "artifacts": [
+            "deploy/k8s/**"
+          ]
+        },
+        {
+          "id": "C-2",
+          "title": "Monitoring & Grafana dashboards wired",
+          "deps": [
+            "B-4"
+          ],
+          "estimate_h": 8,
+          "artifacts": [
+            "dashboards/grafana/**",
+            "monitoring/**"
+          ]
+        },
+        {
+          "id": "C-3",
+          "title": "Performance & load tests",
+          "deps": [
+            "B-4"
+          ],
+          "estimate_h": 10,
+          "artifacts": [
+            "tests/perf/**"
+          ]
+        }
+      ],
+      "quality_gates": {
+        "coverage_core_min": 0.9,
+        "p95_latency_ms": 300,
+        "error_rate_max": 0.01
+      }
+    }
+  ]
+}

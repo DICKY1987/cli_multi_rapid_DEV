@@ -1,0 +1,71 @@
+name: "Verification Plugins Demo"
+description: "Demonstrates MOD-005 plugin-based verification framework"
+inputs:
+  files: ["src/**/*.py"]
+policy:
+  max_tokens: 50000
+  prefer_deterministic: true
+steps:
+  - id: "1.001"
+    name: "Run Tests with Pytest Plugin"
+    actor: verifier
+    with:
+      verification:
+        plugins:
+          - plugin: pytest
+            config:
+              test_paths: ["tests/"]
+              coverage_threshold: 80
+              pytest_args: ["--tb=short"]
+    emits: ["artifacts/test_results.json", "artifacts/coverage.json"]
+
+  - id: "1.002"
+    name: "Code Quality Analysis"
+    actor: verifier
+    with:
+      verification:
+        plugins:
+          - plugin: ruff_semgrep
+            config:
+              paths: ["src/", "tests/"]
+              max_violations: 5
+              ruff_rules: ["E", "W", "F"]
+              semgrep_rules: ["auto"]
+    emits: ["artifacts/ruff_results.json", "artifacts/semgrep_results.json", "artifacts/lint_summary.json"]
+
+  - id: "1.003"
+    name: "Schema Validation"
+    actor: verifier
+    with:
+      verification:
+        plugins:
+          - plugin: schema_validate
+            config:
+              artifacts: ["test_results.json", "coverage.json", "lint_summary.json"]
+              schema_dir: ".ai/schemas"
+    emits: ["artifacts/schema_validation.json"]
+
+  - id: "1.004"
+    name: "Combined Verification Gates"
+    actor: verifier
+    with:
+      verification:
+        # Traditional gates
+        tests: true
+        schema: true
+        diff_limits:
+          max_loc: 500
+        # Plugin gates
+        plugins:
+          - plugin: pytest
+            config:
+              test_paths: ["tests/"]
+              coverage_threshold: 75
+          - plugin: schema_validate
+            config:
+              artifacts: ["test_results.json", "lint_summary.json"]
+    gates:
+      - type: "tests_pass"
+      - type: "schema_valid"
+      - type: "diff_limits"
+        max_lines: 500

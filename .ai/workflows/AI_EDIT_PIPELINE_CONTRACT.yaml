@@ -1,0 +1,132 @@
+﻿name: "AI Edit Pipeline with Contract Validation"
+version: "1.0.0"
+
+inputs:
+  files: ["src/**/*.py"]
+  requirements: "Fix authentication bugs and improve type safety"
+  lane: "lane/ai-edits/auth-fix"
+
+policy:
+  max_tokens: 50000
+  prefer_deterministic: true
+  validation_required: true
+  backup_before_edit: true
+
+steps:
+  - id: "plan"
+    name: "AI Code Analysis & Edit Planning"
+    actor: ai_editor
+    with:
+      mode: "plan_only"
+      prompt_template: "ai_edit_prompt.md"
+      output_format: "structured_edits"
+      schema_validation: true
+    emits: ["artifacts/edit_plan.json"]
+    constraints:
+      max_tokens: 40000
+      temperature: 0.1
+
+  - id: "validate"
+    name: "Edit Command Validation"
+    actor: edit_validator
+    depends_on: ["plan"]
+    with:
+      edit_plan: "artifacts/edit_plan.json"
+      schema_path: ".ai/schemas/edit_schema.json"
+      strict_mode: true
+    emits: ["artifacts/validation_report.json"]
+    gates:
+      - type: "schema_valid"
+        artifact: "artifacts/edit_plan.json"
+        schema: ".ai/schemas/edit_schema.json"
+      - type: "custom"
+        name: "no_validation_errors"
+        check: "validation_report.validation.is_valid == true"
+
+  - id: "backup"
+    name: "Create File Backups"
+    actor: file_backup
+    depends_on: ["validate"]
+    with:
+      files_from_plan: "artifacts/edit_plan.json"
+      backup_dir: "artifacts/backups/"
+    emits: ["artifacts/backup_manifest.json"]
+
+  - id: "apply"
+    name: "Apply Structured Edits"
+    actor: edit_applier
+    depends_on: ["backup"]
+    with:
+      edit_plan: "artifacts/edit_plan.json"
+      verification_mode: "strict"
+      dry_run: false
+    emits: ["artifacts/applied_edits.json"]
+
+  - id: "post_validate"
+    name: "Post-Edit Quality Checks"
+    actor: multi_validator
+    depends_on: ["apply"]
+    with:
+      checks: ["syntax", "imports", "type_hints"]
+    emits: ["artifacts/quality_report.json"]
+    gates:
+      - type: "syntax_valid"
+        languages: ["python"]
+      - type: "imports_resolve"
+
+  - id: "format"
+    name: "Format and Lint Applied Changes"
+    actor: code_fixers
+    depends_on: ["post_validate"]
+    with:
+      tools: ["black", "isort", "ruff --fix"]
+      files_from_edits: "artifacts/applied_edits.json"
+    emits: ["artifacts/formatting_report.json"]
+
+  - id: "test"
+    name: "Run Tests on Modified Code"
+    actor: pytest_runner
+    depends_on: ["format"]
+    with:
+      test_scope: "affected"
+      coverage_threshold: 80
+    emits: ["artifacts/test_results.json"]
+    gates:
+      - type: "tests_pass"
+        artifact: "artifacts/test_results.json"
+      - type: "coverage_maintained"
+        threshold: 80
+
+  - id: "commit"
+    name: "Commit with Edit Metadata"
+    actor: git_ops
+    depends_on: ["test"]
+    with:
+      message_template: |
+        feat: AI-generated edits
+
+        Applied {{edit_count}} edits across {{file_count}} files
+        Validation: {{validation_status}}
+        Edit signatures: {{edit_signatures}}
+      include_artifacts: ["artifacts/validation_report.json", "artifacts/applied_edits.json"]
+    emits: ["artifacts/commit_info.json"]
+
+gates:
+  - type: "all_tests_pass"
+    description: "No broken tests after edits"
+  - type: "no_syntax_errors"
+    description: "All modified files have valid syntax"
+  - type: "edit_integrity"
+    description: "All edits applied successfully without conflicts"
+  - type: "backup_complete"
+    description: "All modified files backed up before changes"
+
+cost_tracking:
+  ai_calls: ["plan"]
+  budget_limit: 50000
+  cost_per_1k_tokens: 0.03
+
+rollback:
+  triggers: ["test_failure", "syntax_error", "user_abort"]
+  restore_from: "artifacts/backups/"
+  cleanup_branch: true

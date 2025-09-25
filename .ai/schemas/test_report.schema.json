@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Test Report Schema",
+  "description": "Schema for test execution artifacts",
+  "type": "object",
+  "required": ["timestamp", "exit_code", "passed", "failed"],
+  "properties": {
+    "timestamp": {
+      "type": "number",
+      "description": "Unix timestamp when tests were run"
+    },
+    "exit_code": {
+      "type": "integer",
+      "description": "Test runner exit code"
+    },
+    "passed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tests that passed"
+    },
+    "failed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tests that failed"
+    },
+    "skipped": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tests that were skipped"
+    },
+    "output": {
+      "type": "string",
+      "description": "Test runner output"
+    },
+    "coverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Code coverage percentage"
+    },
+    "duration": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Test execution time in seconds"
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "test": {"type": "string"},
+          "error": {"type": "string"},
+          "traceback": {"type": "string"}
+        }
+      },
+      "description": "Details of failed tests"
+    }
+  }
+}

@@ -1,0 +1,767 @@
+openapi: 3.0.3
+info:
+  title: CLI Orchestrator API
+  description: |
+    Enterprise HTTP API for CLI Orchestrator workflow execution and management.
+
+    The CLI Orchestrator provides a deterministic, schema-driven approach to
+    orchestrating developer tools and AI agents through predefined workflows.
+
+    ## Features
+
+    - **Schema-validated workflows**: All workflows are validated against JSON schemas
+    - **Deterministic routing**: Prefer deterministic tools, escalate to AI when needed
+    - **Cost tracking**: Track and limit token usage across workflows
+    - **Enterprise security**: JWT authentication, RBAC, audit logging
+    - **Health monitoring**: Comprehensive health checks and metrics
+
+    ## Authentication
+
+    The API supports two authentication methods:
+
+    1. **API Keys**: Include `X-API-Key` header with your API key
+    2. **JWT Tokens**: Include `Authorization: Bearer <token>` header
+
+    ## Rate Limiting
+
+    API requests are rate limited per user:
+    - Default: 60 requests per minute
+    - Workflow execution: 10 concurrent workflows per user
+
+    ## Error Handling
+
+    The API uses standard HTTP status codes:
+    - `200` - Success
+    - `400` - Bad Request (validation errors)
+    - `401` - Unauthorized (authentication required)
+    - `403` - Forbidden (insufficient permissions)
+    - `429` - Too Many Requests (rate limited)
+    - `500` - Internal Server Error
+
+  version: 1.0.0
+  contact:
+    name: CLI Orchestrator Support
+    email: support@cli-orchestrator.local
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Development server
+  - url: https://api.cli-orchestrator.local/api/v1
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+paths:
+  /workflows/execute:
+    post:
+      summary: Execute a workflow
+      description: |
+        Execute a CLI Orchestrator workflow with enterprise monitoring,
+        security, and cost tracking.
+
+        The workflow will be:
+        1. Validated against its JSON schema
+        2. Executed step by step with proper routing
+        3. Tracked for tokens usage and performance
+        4. Audited for security compliance
+
+      operationId: executeWorkflow
+      tags:
+        - Workflows
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowExecutionRequest'
+            examples:
+              python_triage:
+                summary: Python code triage workflow
+                value:
+                  workflow_file: ".ai/workflows/PY_EDIT_TRIAGE.yaml"
+                  files: "src/**/*.py"
+                  lane: "feature/fix-imports"
+                  max_tokens: 50000
+                  dry_run: false
+              javascript_lint:
+                summary: JavaScript linting workflow
+                value:
+                  workflow_file: ".ai/workflows/JS_LINT_FIX.yaml"
+                  files: "**/*.js"
+                  max_tokens: 10000
+                  dry_run: true
+      responses:
+        '200':
+          description: Workflow execution completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowExecutionResponse'
+              examples:
+                successful_execution:
+                  summary: Successful workflow execution
+                  value:
+                    execution_id: "exec_abc123def456"
+                    success: true
+                    error: null
+                    artifacts:
+                      - "artifacts/diagnostics.json"
+                      - "artifacts/fixed_imports.patch"
+                    tokens_used: 1250
+                    steps_completed: 4
+                    execution_time_seconds: 12.5
+                    workflow_name: "PY_EDIT_TRIAGE"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /workflows/{workflowName}/status:
+    get:
+      summary: Get workflow status
+      description: |
+        Get the current status of a specific workflow including
+        active executions, configuration, and health information.
+      operationId: getWorkflowStatus
+      tags:
+        - Workflows
+      parameters:
+        - name: workflowName
+          in: path
+          required: true
+          description: Name of the workflow
+          schema:
+            type: string
+          example: "python-triage"
+      responses:
+        '200':
+          description: Workflow status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStatus'
+
+  /workflows/schemas:
+    get:
+      summary: List available workflow schemas
+      description: |
+        List all available workflow schemas with their metadata
+        and validation information.
+      operationId: listWorkflowSchemas
+      tags:
+        - Workflows
+      responses:
+        '200':
+          description: List of available workflow schemas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkflowSchemaInfo'
+
+  /artifacts:
+    get:
+      summary: List workflow artifacts
+      description: |
+        List artifacts generated by workflow executions,
+        including files, reports, and patches.
+      operationId: listArtifacts
+      tags:
+        - Artifacts
+      parameters:
+        - name: workflow
+          in: query
+          description: Filter by workflow name
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of artifacts to return
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+      responses:
+        '200':
+          description: List of available artifacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifacts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArtifactInfo'
+
+  /artifacts/{artifactPath}:
+    get:
+      summary: Download artifact
+      description: |
+        Download a specific artifact file generated by workflow execution.
+      operationId: downloadArtifact
+      tags:
+        - Artifacts
+      parameters:
+        - name: artifactPath
+          in: path
+          required: true
+          description: Path to the artifact file
+          schema:
+            type: string
+          example: "diagnostics.json"
+      responses:
+        '200':
+          description: Artifact file content
+          content:
+            application/json:
+              schema:
+                type: object
+            text/plain:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /auth/api-key:
+    post:
+      summary: Create API key
+      description: |
+        Create a new API key for programmatic access to the CLI Orchestrator API.
+        Requires admin privileges.
+      operationId: createApiKey
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                  description: Description of the API key usage
+                  example: "CI/CD pipeline access"
+                expires_in_days:
+                  type: integer
+                  description: Number of days until the key expires
+                  default: 365
+                  minimum: 1
+                  maximum: 3650
+      responses:
+        '200':
+          description: API key created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+
+  /auth/api-keys:
+    get:
+      summary: List API keys
+      description: |
+        List API keys associated with the current user.
+        Shows key metadata but not the actual key values.
+      operationId: listApiKeys
+      tags:
+        - Authentication
+      responses:
+        '200':
+          description: List of user's API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKeyInfo'
+
+  /metrics/summary:
+    get:
+      summary: Get metrics summary
+      description: |
+        Get a summary of workflow execution metrics including
+        token usage, success rates, and performance statistics.
+      operationId: getMetricsSummary
+      tags:
+        - Metrics
+      parameters:
+        - name: time_range
+          in: query
+          description: Time range for metrics
+          schema:
+            type: string
+            enum: [1h, 24h, 7d, 30d]
+            default: "24h"
+      responses:
+        '200':
+          description: Metrics summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsSummary'
+
+  /health:
+    get:
+      summary: Health check
+      description: |
+        Get the health status of the CLI Orchestrator service
+        including all dependencies and subsystems.
+      operationId: healthCheck
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /info:
+    get:
+      summary: Service information
+      description: |
+        Get information about the CLI Orchestrator service
+        including version, configuration, and capabilities.
+      operationId: getServiceInfo
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceInfo'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for programmatic access
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for user authentication
+
+  schemas:
+    WorkflowExecutionRequest:
+      type: object
+      required:
+        - workflow_file
+      properties:
+        workflow_file:
+          type: string
+          description: Path to the workflow YAML file
+          example: ".ai/workflows/PY_EDIT_TRIAGE.yaml"
+        files:
+          type: string
+          description: File pattern to process
+          example: "src/**/*.py"
+        lane:
+          type: string
+          description: Git branch lane for work
+          example: "feature/fix-imports"
+        max_tokens:
+          type: integer
+          description: Maximum tokens to spend on execution
+          minimum: 1000
+          maximum: 500000
+          example: 50000
+        dry_run:
+          type: boolean
+          description: Preview execution without making changes
+          default: false
+        parameters:
+          type: object
+          description: Additional workflow parameters
+          additionalProperties: true
+
+    WorkflowExecutionResponse:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          description: Unique identifier for this execution
+          example: "exec_abc123def456"
+        success:
+          type: boolean
+          description: Whether the workflow completed successfully
+        error:
+          type: string
+          nullable: true
+          description: Error message if execution failed
+        artifacts:
+          type: array
+          items:
+            type: string
+          description: List of artifacts generated by the workflow
+          example: ["artifacts/diagnostics.json", "artifacts/fixes.patch"]
+        tokens_used:
+          type: integer
+          description: Number of tokens consumed during execution
+          example: 1250
+        steps_completed:
+          type: integer
+          description: Number of workflow steps completed
+          example: 4
+        execution_time_seconds:
+          type: number
+          format: float
+          description: Total execution time in seconds
+          example: 12.5
+        workflow_name:
+          type: string
+          description: Name of the executed workflow
+          example: "PY_EDIT_TRIAGE"
+
+    WorkflowStatus:
+      type: object
+      properties:
+        workflow_name:
+          type: string
+          example: "python-triage"
+        workflow_file:
+          type: string
+          example: ".ai/workflows/PY_EDIT_TRIAGE.yaml"
+        workflow_exists:
+          type: boolean
+        active_executions:
+          type: integer
+          description: Number of currently active executions
+        service_uptime:
+          type: number
+          format: float
+          description: Service uptime in seconds
+        last_execution:
+          type: object
+          nullable: true
+          properties:
+            execution_id:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+            success:
+              type: boolean
+
+    WorkflowSchemaInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "workflow.schema.json"
+        title:
+          type: string
+          example: "CLI Orchestrator Workflow Schema"
+        description:
+          type: string
+          example: "JSON Schema for validating CLI Orchestrator workflows"
+        version:
+          type: string
+          example: "1.0.0"
+
+    ArtifactInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "diagnostics.json"
+        path:
+          type: string
+          example: "artifacts/2024-01-15/diagnostics.json"
+        size:
+          type: integer
+          description: File size in bytes
+          example: 2048
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        workflow:
+          type: string
+          example: "python-triage"
+        execution_id:
+          type: string
+          example: "exec_abc123def456"
+
+    ApiKeyResponse:
+      type: object
+      properties:
+        api_key:
+          type: string
+          example: "clio_abc123def456ghi789jkl012"
+        description:
+          type: string
+          example: "CI/CD pipeline access"
+        expires_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T10:30:00Z"
+        usage:
+          type: string
+          example: "Include 'X-API-Key: clio_abc123def456ghi789jkl012' in request headers"
+
+    ApiKeyInfo:
+      type: object
+      properties:
+        key_id:
+          type: string
+          example: "key_123"
+        description:
+          type: string
+          example: "CI/CD pipeline access"
+        key_prefix:
+          type: string
+          example: "clio_abc123..."
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_used:
+          type: string
+          format: date-time
+          nullable: true
+        is_active:
+          type: boolean
+
+    MetricsSummary:
+      type: object
+      properties:
+        time_range:
+          type: string
+          example: "24h"
+        total_executions:
+          type: integer
+          example: 42
+        successful_executions:
+          type: integer
+          example: 38
+        failed_executions:
+          type: integer
+          example: 4
+        success_rate:
+          type: number
+          format: float
+          example: 90.48
+        total_tokens_used:
+          type: integer
+          example: 125000
+        average_execution_time:
+          type: number
+          format: float
+          example: 15.2
+        top_workflows:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              executions:
+                type: integer
+              success_rate:
+                type: number
+                format: float
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: "healthy"
+        service:
+          type: string
+          example: "cli-orchestrator"
+        version:
+          type: string
+          example: "1.0.0"
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [healthy, degraded, unhealthy]
+              message:
+                type: string
+              duration_ms:
+                type: number
+                format: float
+
+    ServiceInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "cli-orchestrator"
+        version:
+          type: string
+          example: "1.0.0"
+        description:
+          type: string
+          example: "Deterministic, schema-driven CLI orchestrator"
+        uptime_seconds:
+          type: number
+          format: float
+          example: 3600.5
+        environment:
+          type: string
+          example: "production"
+        features:
+          type: object
+          properties:
+            health_checks:
+              type: boolean
+            metrics:
+              type: boolean
+            security:
+              type: boolean
+            circuit_breaker:
+              type: boolean
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+        request_id:
+          type: string
+          description: Unique request identifier for debugging
+
+  responses:
+    BadRequest:
+      description: Bad request - validation errors or malformed input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "validation_error"
+            message: "Workflow file path is required"
+            details:
+              field: "workflow_file"
+              code: "required"
+
+    Unauthorized:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "unauthorized"
+            message: "Valid API key or JWT token required"
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "forbidden"
+            message: "Insufficient permissions to execute workflows"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "not_found"
+            message: "Artifact not found"
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "rate_limited"
+            message: "API rate limit exceeded. Try again later."
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "internal_error"
+            message: "An unexpected error occurred"
+
+tags:
+  - name: Workflows
+    description: Workflow execution and management
+  - name: Artifacts
+    description: Workflow artifacts and outputs
+  - name: Authentication
+    description: API keys and authentication
+  - name: Metrics
+    description: Performance metrics and analytics
+  - name: System
+    description: System health and information
+
+externalDocs:
+  description: CLI Orchestrator Documentation
+  url: https://docs.cli-orchestrator.local

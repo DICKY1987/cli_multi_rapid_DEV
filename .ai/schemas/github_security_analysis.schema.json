@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitHub Security Analysis Schema",
+  "description": "Schema for validating GitHub security analysis artifacts",
+  "type": "object",
+  "required": ["timestamp", "analysis_type", "success", "data"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Analysis timestamp in ISO format"
+    },
+    "analysis_type": {
+      "type": "string",
+      "const": "security",
+      "description": "Analysis type identifier"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether the analysis completed successfully"
+    },
+    "data": {
+      "type": "object",
+      "required": ["repo", "timestamp"],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "Repository identifier (owner/repo)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "vulnerability_alerts": {
+          "type": "object",
+          "description": "Repository vulnerability alerts"
+        },
+        "security_advisories": {
+          "type": "object",
+          "description": "Security advisories for the repository"
+        },
+        "branch_protection": {
+          "type": "object",
+          "description": "Branch protection settings",
+          "properties": {
+            "required_status_checks": {
+              "type": ["object", "null"],
+              "properties": {
+                "strict": {"type": "boolean"},
+                "contexts": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                }
+              }
+            },
+            "enforce_admins": {"type": ["boolean", "null"]},
+            "required_pull_request_reviews": {
+              "type": ["object", "null"],
+              "properties": {
+                "dismiss_stale_reviews": {"type": "boolean"},
+                "require_code_owner_reviews": {"type": "boolean"},
+                "required_approving_review_count": {"type": "integer", "minimum": 0}
+              }
+            },
+            "restrictions": {"type": ["object", "null"]}
+          }
+        },
+        "secrets_scanning": {
+          "type": "object",
+          "description": "Secrets scanning configuration and results"
+        },
+        "dependency_vulnerabilities": {
+          "type": "object",
+          "description": "Dependency vulnerability information"
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Security improvement recommendations"
+    },
+    "issues_found": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Security issues identified"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "adapter": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    }
+  }
+}

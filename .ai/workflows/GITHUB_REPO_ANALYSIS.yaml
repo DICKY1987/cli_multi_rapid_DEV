@@ -1,0 +1,110 @@
+name: "GitHub Repository Analysis"
+description: "Comprehensive analysis of GitHub repository health, security, and quality metrics"
+
+inputs:
+  repo: "auto-detect"  # Will auto-detect from git remote or specify owner/repo
+  analysis_types:
+    - "repository"
+    - "security"
+    - "code_quality"
+
+policy:
+  max_tokens: 5000
+  prefer_deterministic: true
+  timeout_minutes: 15
+
+steps:
+  - id: "1.001"
+    name: "Repository Overview Analysis"
+    actor: github_integration
+    with:
+      analysis_type: "repository"
+      repo: "${inputs.repo}"
+    emits:
+      - "artifacts/github_repository_overview.json"
+
+  - id: "1.002"
+    name: "Security Analysis"
+    actor: github_integration
+    with:
+      analysis_type: "security"
+      repo: "${inputs.repo}"
+    emits:
+      - "artifacts/github_security_analysis.json"
+
+  - id: "1.003"
+    name: "Code Quality Analysis"
+    actor: github_integration
+    with:
+      analysis_type: "code_quality"
+      repo: "${inputs.repo}"
+    emits:
+      - "artifacts/github_code_quality.json"
+
+  - id: "1.004"
+    name: "Dependency Analysis"
+    actor: github_integration
+    with:
+      analysis_type: "dependencies"
+      repo: "${inputs.repo}"
+    emits:
+      - "artifacts/github_dependencies.json"
+
+  - id: "1.005"
+    name: "Workflow Health Check"
+    actor: github_integration
+    with:
+      analysis_type: "workflow_health"
+      repo: "${inputs.repo}"
+    emits:
+      - "artifacts/github_workflow_health.json"
+
+  - id: "2.001"
+    name: "Validate Repository Analysis"
+    actor: verifier
+    with:
+      checks:
+        - type: "schema_valid"
+          from: "artifacts/github_repository_overview.json"
+          schema: ".ai/schemas/github_repository_analysis.schema.json"
+        - type: "schema_valid"
+          from: "artifacts/github_security_analysis.json"
+          schema: ".ai/schemas/github_security_analysis.schema.json"
+
+  - id: "3.001"
+    name: "Generate Analysis Report"
+    actor: ai_analyst
+    when: "all_previous_steps_success"
+    with:
+      tool: "claude"
+      context:
+        analysis_artifacts:
+          - "artifacts/github_repository_overview.json"
+          - "artifacts/github_security_analysis.json"
+          - "artifacts/github_code_quality.json"
+          - "artifacts/github_dependencies.json"
+          - "artifacts/github_workflow_health.json"
+        prompt: |
+          Analyze the GitHub repository data and generate a comprehensive report with:
+          1. Executive summary of repository health
+          2. Key findings and metrics
+          3. Security recommendations
+          4. Code quality improvements
+          5. Action items prioritized by impact
+    emits:
+      - "artifacts/github_analysis_report.md"
+
+  - id: "4.001"
+    name: "Create Analysis Summary Issue"
+    actor: git_ops
+    when: "inputs.create_issue == true"
+    with:
+      operation: "create_issue"
+      repo: "${inputs.repo}"
+      issue_title: "Repository Analysis Report - ${date}"
+      issue_body: "Automated repository analysis completed. See attached report for findings and recommendations."
+      labels:
+        - "analysis"
+        - "automation"
+    emits:
+      - "artifacts/analysis_issue.json"

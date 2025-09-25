@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Improvements Artifact",
+  "type": "object",
+  "required": ["timestamp", "type", "changes"],
+  "properties": {
+    "timestamp": {"type": "string"},
+    "type": {"const": "ai_improvements"},
+    "tool": {"type": "string"},
+    "model": {"type": "string"},
+    "files_modified": {"type": "integer", "minimum": 0},
+    "prompt_length": {"type": "integer", "minimum": 0},
+    "changes": {"type": "array", "items": {"type": "object"}}
+  }
+}

@@ -1,0 +1,28 @@
+name: "Test Adapter Framework"
+description: "Simple test of the new adapter framework"
+
+inputs:
+  files: ["test_file.py"]
+  lane: "test"
+
+policy:
+  max_tokens: 5000
+  prefer_deterministic: true
+  timeout_minutes: 5
+
+steps:
+  - id: "1.001"
+    name: "VS Code Diagnostic Analysis"
+    actor: vscode_diagnostics
+    with:
+      analyzers: ["python", "ruff"]
+      files: "test_file.py"
+    emits: ["artifacts/test_diagnostics.json"]
+
+  - id: "1.002"
+    name: "Apply Code Fixes"
+    actor: code_fixers
+    with:
+      tools: ["black", "isort"]
+      files: "test_file.py"
+    emits: ["artifacts/test_fixes.json"]

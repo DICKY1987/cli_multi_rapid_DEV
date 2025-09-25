@@ -1,0 +1,147 @@
+name: "GitHub Issue Automation"
+description: "Automated issue triage, categorization, and management for GitHub repositories"
+
+inputs:
+  repo: "auto-detect"  # Will auto-detect from git remote or specify owner/repo
+  state: "open"        # open, closed, all
+  max_issues: 50       # Maximum number of issues to process
+
+policy:
+  max_tokens: 8000
+  prefer_deterministic: true
+  timeout_minutes: 20
+
+steps:
+  - id: "1.001"
+    name: "Fetch Open Issues"
+    actor: git_ops
+    with:
+      operation: "get_issues"
+      repo: "${inputs.repo}"
+      state: "${inputs.state}"
+    emits:
+      - "artifacts/github_issues_raw.json"
+
+  - id: "1.002"
+    name: "Perform Issue Triage Analysis"
+    actor: github_integration
+    with:
+      analysis_type: "issue_triage"
+      repo: "${inputs.repo}"
+    emits:
+      - "artifacts/github_issue_triage.json"
+
+  - id: "2.001"
+    name: "Validate Issue Triage Data"
+    actor: verifier
+    with:
+      checks:
+        - type: "schema_valid"
+          from: "artifacts/github_issue_triage.json"
+          schema: ".ai/schemas/github_issue_triage.schema.json"
+
+  - id: "3.001"
+    name: "Generate Issue Recommendations"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        issue_data: "artifacts/github_issue_triage.json"
+        prompt: |
+          Analyze the GitHub issues and provide:
+          1. Categorization recommendations for uncategorized issues
+          2. Priority assignments based on impact and urgency
+          3. Suggested labels for better organization
+          4. Identification of duplicate or related issues
+          5. Actionable next steps for critical issues
+          6. Patterns in issue types and suggestions for prevention
+    emits:
+      - "artifacts/issue_recommendations.json"
+
+  - id: "4.001"
+    name: "Create Triage Summary"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        triage_data: "artifacts/github_issue_triage.json"
+        recommendations: "artifacts/issue_recommendations.json"
+        prompt: |
+          Create a comprehensive issue triage summary including:
+          1. Issue statistics and breakdown by category/priority
+          2. Critical issues requiring immediate attention
+          3. Stale issues that may need closure
+          4. Trends and patterns in issue reporting
+          5. Recommended actions for maintainers
+          6. Template improvements based on common issue patterns
+    emits:
+      - "artifacts/issue_triage_summary.md"
+
+  - id: "5.001"
+    name: "Create Triage Report Issue"
+    actor: git_ops
+    when: "inputs.create_report_issue == true"
+    with:
+      operation: "create_issue"
+      repo: "${inputs.repo}"
+      issue_title: "Issue Triage Report - ${date}"
+      issue_body: |
+        ## Automated Issue Triage Report
+
+        This report contains automated analysis and recommendations for current repository issues.
+
+        **Summary:**
+        - Total issues analyzed: ${triage_stats.total_issues}
+        - Critical issues: ${triage_stats.critical_count}
+        - Stale issues (>90 days): ${triage_stats.stale_count}
+
+        See attached artifacts for detailed analysis and recommendations.
+      labels:
+        - "triage"
+        - "automation"
+        - "maintenance"
+    emits:
+      - "artifacts/triage_report_issue.json"
+
+  - id: "6.001"
+    name: "Auto-Label Critical Issues"
+    actor: git_ops
+    when: "inputs.auto_label == true"
+    with:
+      operation: "bulk_label"
+      repo: "${inputs.repo}"
+      source: "artifacts/issue_recommendations.json"
+      label_mapping:
+        critical: ["critical", "urgent"]
+        bug: ["bug", "defect"]
+        enhancement: ["enhancement", "feature"]
+        question: ["question", "help-wanted"]
+    emits:
+      - "artifacts/auto_labeling_results.json"
+
+  - id: "7.001"
+    name: "Generate Actionable Tasks"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        all_artifacts:
+          - "artifacts/github_issue_triage.json"
+          - "artifacts/issue_recommendations.json"
+          - "artifacts/issue_triage_summary.md"
+        prompt: |
+          Based on the issue triage analysis, generate a prioritized list of actionable tasks for the repository maintainers:
+
+          1. Immediate Actions (Critical/Urgent)
+          2. Short-term Improvements (1-2 weeks)
+          3. Long-term Enhancements (1+ months)
+          4. Process Improvements
+          5. Automation Opportunities
+
+          For each task, provide:
+          - Clear description
+          - Estimated effort
+          - Impact assessment
+          - Dependencies or prerequisites
+    emits:
+      - "artifacts/maintainer_action_plan.json"

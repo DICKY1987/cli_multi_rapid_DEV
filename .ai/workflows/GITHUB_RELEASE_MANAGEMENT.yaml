@@ -1,0 +1,351 @@
+name: "GitHub Release Management"
+description: "Automated release planning, changelog generation, and release management for GitHub repositories"
+
+inputs:
+  repo: "auto-detect"  # Will auto-detect from git remote or specify owner/repo
+  release_type: "auto"  # auto, major, minor, patch
+  create_release: false # Whether to create actual release
+  tag_name: null       # Specific tag for release analysis
+
+policy:
+  max_tokens: 10000
+  prefer_deterministic: true
+  timeout_minutes: 30
+
+steps:
+  - id: "1.001"
+    name: "Analyze Release Information"
+    actor: github_integration
+    with:
+      analysis_type: "release_management"
+      repo: "${inputs.repo}"
+      tag: "${inputs.tag_name}"
+    emits:
+      - "artifacts/github_release_analysis.json"
+
+  - id: "1.002"
+    name: "Get Latest Release Info"
+    actor: git_ops
+    with:
+      operation: "release_info"
+      repo: "${inputs.repo}"
+      tag: "latest"
+    emits:
+      - "artifacts/latest_release_info.json"
+
+  - id: "1.003"
+    name: "Analyze Commits Since Last Release"
+    actor: git_ops
+    with:
+      operation: "commit_analysis"
+      repo: "${inputs.repo}"
+      since_tag: "latest"
+    emits:
+      - "artifacts/commits_since_release.json"
+
+  - id: "2.001"
+    name: "Generate Release Notes"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        release_data: "artifacts/github_release_analysis.json"
+        latest_release: "artifacts/latest_release_info.json"
+        commits: "artifacts/commits_since_release.json"
+        prompt: |
+          Generate comprehensive release notes based on the analysis:
+
+          1. **Release Summary**
+             - Version increment recommendation (major/minor/patch)
+             - Key features and improvements
+             - Breaking changes (if any)
+             - Bug fixes and performance improvements
+
+          2. **Detailed Changelog**
+             - New Features
+             - Enhancements
+             - Bug Fixes
+             - Documentation Updates
+             - Dependencies Updates
+
+          3. **Migration Guide** (if breaking changes)
+             - What changed
+             - How to migrate
+             - Compatibility notes
+
+          4. **Acknowledgments**
+             - Contributors
+             - Community feedback
+
+          Format as proper markdown for GitHub release.
+    emits:
+      - "artifacts/release_notes.md"
+
+  - id: "3.001"
+    name: "Determine Release Version"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        commits: "artifacts/commits_since_release.json"
+        latest_release: "artifacts/latest_release_info.json"
+        release_type: "${inputs.release_type}"
+        prompt: |
+          Analyze commits and determine appropriate version number:
+
+          1. **Semantic Version Analysis**
+             - Breaking changes (major)
+             - New features (minor)
+             - Bug fixes (patch)
+
+          2. **Commit Message Analysis**
+             - Look for conventional commit patterns
+             - Identify scope and impact
+             - Assess backwards compatibility
+
+          3. **Version Recommendation**
+             - Current version: ${latest_release.tag_name}
+             - Recommended next version
+             - Reasoning for version bump
+
+          Return JSON with version recommendation and reasoning.
+    emits:
+      - "artifacts/version_recommendation.json"
+
+  - id: "4.001"
+    name: "Generate Release Checklist"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        release_analysis: "artifacts/github_release_analysis.json"
+        version_rec: "artifacts/version_recommendation.json"
+        prompt: |
+          Create a comprehensive release checklist:
+
+          **Pre-Release Checklist:**
+          - [ ] All tests passing
+          - [ ] Documentation updated
+          - [ ] Dependencies reviewed
+          - [ ] Breaking changes documented
+          - [ ] Migration guide prepared (if needed)
+
+          **Release Process:**
+          - [ ] Tag created with version ${version}
+          - [ ] Release notes finalized
+          - [ ] Artifacts built and tested
+          - [ ] Release published
+
+          **Post-Release:**
+          - [ ] Documentation deployed
+          - [ ] Community notified
+          - [ ] Next milestone planned
+          - [ ] Issues/PRs labeled with version
+
+          Include specific tasks based on repository analysis.
+    emits:
+      - "artifacts/release_checklist.md"
+
+  - id: "5.001"
+    name: "Analyze Release Readiness"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        all_data:
+          - "artifacts/github_release_analysis.json"
+          - "artifacts/commits_since_release.json"
+          - "artifacts/version_recommendation.json"
+        prompt: |
+          Assess release readiness and identify any blockers:
+
+          1. **Readiness Assessment**
+             - Code stability
+             - Test coverage
+             - Documentation completeness
+             - Outstanding issues
+
+          2. **Blocker Identification**
+             - Critical bugs
+             - Missing features
+             - Incomplete documentation
+             - Failing tests
+
+          3. **Risk Assessment**
+             - Breaking changes impact
+             - Backwards compatibility
+             - Performance implications
+             - Security considerations
+
+          4. **Recommendations**
+             - Go/no-go decision
+             - Required actions before release
+             - Timeline suggestions
+
+          Return structured assessment with confidence score.
+    emits:
+      - "artifacts/release_readiness.json"
+
+  - id: "6.001"
+    name: "Create Release Plan"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        readiness: "artifacts/release_readiness.json"
+        checklist: "artifacts/release_checklist.md"
+        release_notes: "artifacts/release_notes.md"
+        prompt: |
+          Create a detailed release plan:
+
+          **Release Overview**
+          - Version: ${recommended_version}
+          - Type: ${release_type}
+          - Target Date: ${suggested_date}
+
+          **Release Timeline**
+          - Pre-release tasks and deadlines
+          - Release day activities
+          - Post-release follow-up
+
+          **Responsibilities**
+          - Task assignments
+          - Review requirements
+          - Approval workflows
+
+          **Rollback Plan**
+          - Rollback triggers
+          - Rollback procedure
+          - Communication plan
+
+          **Success Metrics**
+          - How to measure release success
+          - Monitoring and alerting
+          - Feedback collection
+
+          Format as actionable project plan.
+    emits:
+      - "artifacts/release_plan.md"
+
+  - id: "7.001"
+    name: "Create Release Issue"
+    actor: git_ops
+    when: "inputs.create_release_issue == true"
+    with:
+      operation: "create_issue"
+      repo: "${inputs.repo}"
+      issue_title: "Release ${recommended_version} - Planning and Tracking"
+      issue_body: |
+        ## Release ${recommended_version} Planning
+
+        **Release Type:** ${release_type}
+        **Target Date:** ${target_date}
+        **Readiness Score:** ${readiness_score}/100
+
+        ### Key Changes
+        ${key_changes_summary}
+
+        ### Release Checklist
+        ${release_checklist}
+
+        ### Next Steps
+        ${next_steps}
+
+        **Artifacts:**
+        - Release Notes: See artifacts/release_notes.md
+        - Release Plan: See artifacts/release_plan.md
+        - Readiness Assessment: See artifacts/release_readiness.json
+
+        **Generated by:** CLI Orchestrator Release Management
+      labels:
+        - "release"
+        - "planning"
+        - "automation"
+    emits:
+      - "artifacts/release_issue.json"
+
+  - id: "8.001"
+    name: "Prepare Release Assets"
+    actor: ai_analyst
+    when: "inputs.prepare_assets == true"
+    with:
+      tool: "claude"
+      context:
+        release_plan: "artifacts/release_plan.md"
+        prompt: |
+          Generate scripts and templates for release preparation:
+
+          1. **Version Bump Script**
+             - Update version in package files
+             - Update documentation
+             - Create git tag
+
+          2. **Build Script**
+             - Compile/build artifacts
+             - Run tests
+             - Package for distribution
+
+          3. **Release Template**
+             - GitHub release template
+             - Announcement template
+             - Social media templates
+
+          4. **Deployment Checklist**
+             - Pre-deployment verification
+             - Deployment steps
+             - Post-deployment validation
+
+          Return as executable scripts and templates.
+    emits:
+      - "artifacts/release_scripts.sh"
+      - "artifacts/release_templates.md"
+
+  - id: "9.001"
+    name: "Draft GitHub Release"
+    actor: git_ops
+    when: "inputs.create_release == true"
+    with:
+      operation: "create_release"
+      repo: "${inputs.repo}"
+      tag_name: "${recommended_version}"
+      release_name: "Release ${recommended_version}"
+      body_file: "artifacts/release_notes.md"
+      draft: true
+      prerelease: false
+    emits:
+      - "artifacts/github_release_draft.json"
+
+  - id: "10.001"
+    name: "Generate Release Metrics"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        release_data: "artifacts/github_release_analysis.json"
+        prompt: |
+          Generate release metrics and analytics:
+
+          1. **Development Metrics**
+             - Time since last release
+             - Number of commits
+             - Number of contributors
+             - Lines of code changed
+
+          2. **Quality Metrics**
+             - Test coverage changes
+             - Bug fix ratio
+             - Feature/fix breakdown
+
+          3. **Community Metrics**
+             - Issue resolution rate
+             - PR merge rate
+             - Community contributions
+
+          4. **Trend Analysis**
+             - Release frequency trends
+             - Velocity improvements
+             - Quality indicators
+
+          Format as structured data for tracking and visualization.
+    emits:
+      - "artifacts/release_metrics.json"

@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ResultManifest",
+  "type": "object",
+  "required": ["job_id", "changes"],
+  "properties": {
+    "job_id": { "type": "string" },
+    "request_id": { "type": ["string","null"] },
+    "convergence_outcome": { "type": ["string","null"], "enum": ["ALL-PASS","QUORUM","PRIORITIZED",null] },
+    "patches": { "type": "array", "items": { "type": "string" } },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path","change"],
+        "properties": {
+          "path": { "type": "string" },
+          "change": { "type": "string", "enum": ["add","modify","delete","rename"] },
+          "hash_before": { "type": ["string","null"] },
+          "hash_after": { "type": ["string","null"] }
+        }
+      }
+    }
+  }
+}

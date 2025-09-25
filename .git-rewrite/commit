@@ -1,0 +1,6 @@
+tree bd0f15ebb074a5d31237e92dc3127de2e7296ba6
+parent 8c41f8c96dc09e31aed739a61a53b6ccbc13797d
+author DICKY1987 <richgwilks@GMAIL.com> 1757802222 -0500
+committer DICKY1987 <richgwilks@GMAIL.com> 1757802222 -0500
+
+feat(gui-terminal): add exit code reporting on POSIX, strip ANSI in UI, extend server ops; tests: exit code parity (POSIX only)

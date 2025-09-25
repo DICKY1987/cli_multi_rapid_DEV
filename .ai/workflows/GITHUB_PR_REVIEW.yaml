@@ -1,0 +1,246 @@
+name: "GitHub PR Review Automation"
+description: "Automated pull request analysis, review suggestions, and merge readiness assessment"
+
+inputs:
+  repo: "auto-detect"  # Will auto-detect from git remote or specify owner/repo
+  pr_number: null      # Specific PR number, or null for all open PRs
+  auto_review: false   # Whether to post automated review comments
+
+policy:
+  max_tokens: 12000
+  prefer_deterministic: true
+  timeout_minutes: 25
+
+steps:
+  - id: "1.001"
+    name: "Analyze PR for Automation"
+    actor: github_integration
+    with:
+      analysis_type: "pr_automation"
+      repo: "${inputs.repo}"
+    emits:
+      - "artifacts/github_pr_automation.json"
+
+  - id: "1.002"
+    name: "Detailed PR Analysis"
+    actor: git_ops
+    when: "inputs.pr_number != null"
+    with:
+      operation: "pr_review"
+      repo: "${inputs.repo}"
+      pr_number: "${inputs.pr_number}"
+    emits:
+      - "artifacts/github_pr_details.json"
+
+  - id: "2.001"
+    name: "Validate PR Analysis Data"
+    actor: verifier
+    with:
+      checks:
+        - type: "schema_valid"
+          from: "artifacts/github_pr_automation.json"
+          schema: ".ai/schemas/github_pr_review.schema.json"
+
+  - id: "3.001"
+    name: "Generate PR Review Insights"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        pr_data: "artifacts/github_pr_automation.json"
+        detailed_pr: "artifacts/github_pr_details.json"
+        prompt: |
+          Analyze the pull request data and provide comprehensive review insights:
+
+          1. **Merge Readiness Assessment**
+             - CI/CD status and test coverage
+             - Code review status and approval state
+             - Merge conflicts and blockers
+             - Size and complexity evaluation
+
+          2. **Code Quality Analysis**
+             - File change patterns and impact
+             - Potential areas of concern
+             - Testing adequacy
+             - Documentation updates
+
+          3. **Review Suggestions**
+             - Areas requiring focused review
+             - Security considerations
+             - Performance implications
+             - Breaking change assessment
+
+          4. **Automation Opportunities**
+             - Auto-mergeable PRs
+             - PRs needing maintainer attention
+             - Stale PRs requiring action
+
+          5. **Process Improvements**
+             - PR template effectiveness
+             - Review workflow optimization
+             - CI/CD enhancement suggestions
+    emits:
+      - "artifacts/pr_review_insights.json"
+
+  - id: "4.001"
+    name: "Create PR Review Summary"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        pr_insights: "artifacts/pr_review_insights.json"
+        pr_automation: "artifacts/github_pr_automation.json"
+        prompt: |
+          Create a comprehensive PR review summary for maintainers:
+
+          1. **Executive Summary**
+             - Total open PRs and their status
+             - Ready-to-merge count
+             - Attention-required count
+
+          2. **Priority Actions**
+             - Critical PRs needing immediate review
+             - Approved PRs ready for merge
+             - Stale PRs requiring decision
+
+          3. **Quality Metrics**
+             - Average PR size and complexity
+             - Review turnaround times
+             - Common patterns and issues
+
+          4. **Recommendations**
+             - Process improvements
+             - Automation opportunities
+             - Review workflow enhancements
+
+          Format as actionable markdown report.
+    emits:
+      - "artifacts/pr_review_summary.md"
+
+  - id: "5.001"
+    name: "Identify Ready-to-Merge PRs"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        pr_data: "artifacts/github_pr_automation.json"
+        prompt: |
+          Identify PRs that are ready to merge based on:
+          - All checks passing
+          - Approved reviews
+          - No merge conflicts
+          - Size/complexity assessment
+          - Recent activity
+
+          Return JSON with PR numbers and merge confidence scores.
+    emits:
+      - "artifacts/ready_to_merge_prs.json"
+
+  - id: "6.001"
+    name: "Create Review Action Plan"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        all_pr_data:
+          - "artifacts/github_pr_automation.json"
+          - "artifacts/pr_review_insights.json"
+          - "artifacts/ready_to_merge_prs.json"
+        prompt: |
+          Create a prioritized action plan for PR management:
+
+          **Immediate Actions (Today)**
+          - Merge approved PRs
+          - Review critical/blocking PRs
+          - Close stale/outdated PRs
+
+          **Short-term Actions (This Week)**
+          - Review pending PRs by priority
+          - Update PR guidelines if needed
+          - Address review bottlenecks
+
+          **Process Improvements**
+          - Automation opportunities
+          - Review workflow optimizations
+          - Template and guideline updates
+
+          Include specific PR numbers, estimated time investment, and impact assessment.
+    emits:
+      - "artifacts/pr_action_plan.json"
+
+  - id: "7.001"
+    name: "Post Review Summary"
+    actor: git_ops
+    when: "inputs.create_summary_issue == true"
+    with:
+      operation: "create_issue"
+      repo: "${inputs.repo}"
+      issue_title: "PR Review Summary - ${date}"
+      issue_body: |
+        ## Automated PR Review Summary
+
+        **Status Overview:**
+        - Total open PRs: ${pr_stats.total}
+        - Ready to merge: ${pr_stats.ready_to_merge}
+        - Needs review: ${pr_stats.needs_review}
+        - Has conflicts: ${pr_stats.conflicts}
+
+        **Priority Actions:**
+        See attached action plan for detailed recommendations.
+
+        **Analysis Period:** ${date}
+        **Generated by:** CLI Orchestrator PR Review Automation
+      labels:
+        - "pr-review"
+        - "automation"
+        - "maintenance"
+    emits:
+      - "artifacts/pr_summary_issue.json"
+
+  - id: "8.001"
+    name: "Auto-merge Ready PRs"
+    actor: git_ops
+    when: "inputs.auto_merge == true"
+    with:
+      operation: "bulk_merge"
+      repo: "${inputs.repo}"
+      source: "artifacts/ready_to_merge_prs.json"
+      merge_method: "squash"  # squash, merge, rebase
+      require_approval: true
+      require_status_checks: true
+    emits:
+      - "artifacts/auto_merge_results.json"
+
+  - id: "9.001"
+    name: "Generate Performance Metrics"
+    actor: ai_analyst
+    with:
+      tool: "claude"
+      context:
+        pr_data: "artifacts/github_pr_automation.json"
+        prompt: |
+          Generate PR performance metrics and trends:
+
+          1. **Velocity Metrics**
+             - Average time to review
+             - Average time to merge
+             - PR throughput trends
+
+          2. **Quality Metrics**
+             - Average PR size
+             - Review coverage
+             - CI/CD success rates
+
+          3. **Bottleneck Analysis**
+             - Review assignment patterns
+             - Stale PR identification
+             - Process improvement opportunities
+
+          4. **Recommendations**
+             - Workflow optimizations
+             - Reviewer assignment improvements
+             - Automation opportunities
+
+          Format as structured JSON for tracking and visualization.
+    emits:
+      - "artifacts/pr_performance_metrics.json"

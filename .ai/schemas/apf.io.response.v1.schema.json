@@ -1,0 +1,19 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "apf.io.response.v1.schema.json",
+  "title": "APF IO Response v1",
+  "type": "object",
+  "required": ["version", "id", "status", "exit_code"],
+  "properties": {
+    "version": {"const": "io.v1"},
+    "id": {"type": "string"},
+    "status": {"enum": ["ok","error","partial"]},
+    "exit_code": {"type": "integer"},
+    "outputs": {"type": "object", "additionalProperties": true},
+    "metrics": {"type": "object", "properties": {"duration_ms": {"type": "integer"}, "tokens": {"type": "integer"}, "cost_usd": {"type": "number"}}},
+    "artifacts": {"type": "array", "items": {"type": "object", "required":["name","type"], "properties": {"name": {"type":"string"}, "path": {"type":"string"}, "type": {"enum":["file","dir","url","inline"]}, "role": {"enum":["primary","secondary","log","tmp"], "default":"secondary"}, "mime": {"type":"string"}}}},
+    "events_path": {"type":"string"},
+    "errors": {"type":"array", "items": {"type":"object", "required":["code","message"], "properties": {"code": {"type":"string"}, "message": {"type":"string"}, "details": {"type":["string","object","array"]}, "hint": {"type":"string"}}}}
+  },
+  "additionalProperties": false
+}
