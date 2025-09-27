@@ -8,7 +8,7 @@ CLI orchestrator that routes between deterministic tools and AI agents.
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import typer
 from rich.console import Console
@@ -187,6 +187,411 @@ def run_ipt_wt(
         console.print("[red]Workflow runner not available[/red]")
         raise typer.Exit(code=1)
 
+
+# Coordination command group
+coordination_app = typer.Typer(
+    name="coordination", help="Multi-agent workflow coordination commands"
+)
+app.add_typer(coordination_app, name="coordination")
+
+
+def _ensure_state_dir() -> Path:
+    state_dir = Path("state/coordination")
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return state_dir
+
+
+def _json_default(o: Any):
+    try:
+        import enum
+
+        if isinstance(o, enum.Enum):
+            return o.value
+    except Exception:
+        pass
+    try:
+        from dataclasses import asdict, is_dataclass
+
+        if is_dataclass(o):
+            return asdict(o)
+    except Exception:
+        pass
+    if isinstance(o, (Path,)):
+        return str(o)
+    return str(o)
+
+
+@coordination_app.command("run")
+def coordination_run(
+    workflows: List[Path] = typer.Argument(
+        ..., help="Workflow YAML files to coordinate"
+    ),
+    mode: str = typer.Option("parallel", "--mode", help="Coordination mode"),
+    max_parallel: int = typer.Option(3, "--max-parallel", help="Max parallel workflows"),
+    budget: float = typer.Option(50.0, "--budget", help="Total budget in USD"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show plan without executing"),
+):
+    """Run coordinated multi-workflow execution."""
+    console.print("[bold blue]Running coordinated workflows[/bold blue]")
+    console.print(f"[dim]Mode={mode}, MaxParallel={max_parallel}, Budget=${budget:.2f}, DryRun={dry_run}[/dim]")
+
+    try:
+        # Load defaults from coordination config (override only if still defaults)
+        from .config.coordination import load_coordination_config
+
+        cfg = load_coordination_config()
+        # If user did not change defaults, adopt config values
+        if mode == "parallel" and cfg.default_mode:
+            mode = cfg.default_mode
+        if max_parallel == 3 and cfg.max_parallel_workflows:
+            max_parallel = cfg.max_parallel_workflows
+        if abs(budget - 50.0) < 1e-9 and cfg.default_budget:
+            budget = cfg.default_budget
+
+        from .workflow_runner import WorkflowRunner
+
+        runner = WorkflowRunner()
+        result = runner.run_coordinated_workflows(
+            workflow_files=workflows,
+            coordination_mode=mode,
+            max_parallel=max_parallel,
+            total_budget=budget,
+            dry_run=dry_run,
+        )
+
+        state_dir = _ensure_state_dir()
+        summary = {
+            "coordination_id": result.coordination_id,
+            "success": result.success,
+            "total_tokens_used": result.total_tokens_used,
+            "total_execution_time": result.total_execution_time,
+            "parallel_efficiency": result.parallel_efficiency,
+            "conflicts_detected": result.conflicts_detected,
+            "workflows": {
+                name: {
+                    "success": r.success,
+                    "tokens_used": r.tokens_used,
+                    "steps_completed": r.steps_completed,
+                    "execution_time": r.execution_time,
+                    "error": r.error,
+                    "artifacts": r.artifacts,
+                }
+                for name, r in (result.workflow_results or {}).items()
+            },
+            "params": {
+                "mode": mode,
+                "max_parallel": max_parallel,
+                "budget": budget,
+                "dry_run": dry_run,
+                "input_files": [str(p) for p in workflows],
+            },
+        }
+
+        out_path = state_dir / f"{result.coordination_id}.json"
+        try:
+            import json
+
+            with out_path.open("w", encoding="utf-8") as f:
+                json.dump(summary, f, indent=2, default=_json_default)
+            console.print(f"[dim]Saved state: {out_path}[/dim]")
+        except Exception as e:
+            console.print(f"[yellow]Could not persist coordination state: {e}[/yellow]")
+
+        if result.success:
+            console.print(f"[green]{_symbol(True)} Coordination completed: {result.coordination_id}[/green]")
+        else:
+            if result.conflicts_detected:
+                for c in result.conflicts_detected:
+                    console.print(f"[red]- {c}[/red]")
+            console.print(f"[red]{_symbol(False)} Coordination failed: {result.coordination_id}[/red]")
+            raise typer.Exit(code=1)
+
+    except ImportError:
+        console.print("[red]Workflow runner not available[/red]")
+        raise typer.Exit(code=1)
+
+
+@coordination_app.command("plan")
+def coordination_plan(
+    workflows: List[Path] = typer.Argument(..., help="Workflow files to analyze"),
+    output: Path = typer.Option(
+        Path("coordination_plan.json"), "--output", help="Output file"
+    ),
+):
+    """Create coordination plan with conflict detection."""
+    try:
+        import json
+        import yaml
+        from dataclasses import asdict
+        from .coordination import WorkflowCoordinator
+
+        # Load workflows
+        loaded: List[Dict[str, Any]] = []
+        for wf in workflows:
+            with wf.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+                loaded.append(data)
+
+        coordinator = WorkflowCoordinator()
+        plan = coordinator.create_coordination_plan(loaded)
+
+        # Serialize plan safely (convert Enums)
+        def _enum_safe(obj: Any) -> Any:
+            d = asdict(obj)
+            # Best-effort enum conversion
+            def _fix(v):
+                try:
+                    import enum
+
+                    if isinstance(v, enum.Enum):
+                        return v.value
+                except Exception:
+                    pass
+                return v
+
+            for k, v in list(d.items()):
+                if isinstance(v, list):
+                    d[k] = [(_fix(x) if not isinstance(x, dict) else x) for x in v]
+                else:
+                    d[k] = _fix(v)
+            return d
+
+        plan_dict = _enum_safe(plan)
+        with output.open("w", encoding="utf-8") as f:
+            json.dump(plan_dict, f, indent=2, default=_json_default)
+        console.print(f"[green]{_symbol(True)} Plan written to {output}[/green]")
+    except Exception as e:
+        console.print(f"[red]{_symbol(False)} Failed to create plan: {e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@coordination_app.command("status")
+def coordination_status(
+    coordination_id: str = typer.Argument(..., help="Coordination session ID"),
+):
+    """Show coordination session status from persisted state."""
+    try:
+        import json
+
+        state_file = _ensure_state_dir() / f"{coordination_id}.json"
+        if not state_file.exists():
+            console.print(f"[yellow]No state found for {coordination_id}[/yellow]")
+            raise typer.Exit(code=1)
+
+        with state_file.open("r", encoding="utf-8") as f:
+            state = json.load(f)
+
+        ok = bool(state.get("success"))
+        console.print(
+            f"[bold blue]Coordination {coordination_id}[/bold blue] - {'SUCCESS' if ok else 'FAILED'}"
+        )
+        console.print(
+            f"[dim]tokens={state.get('total_tokens_used', 0)}, time={state.get('total_execution_time', 0.0):.2f}s, efficiency={state.get('parallel_efficiency', 0.0):.2f}[/dim]"
+        )
+
+        conflicts = state.get("conflicts_detected") or []
+        if conflicts:
+            console.print("[red]Conflicts detected:[/red]")
+            for c in conflicts:
+                console.print(f"[red]- {c}[/red]")
+
+    except Exception as e:
+        console.print(f"[red]Error reading status: {e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@coordination_app.command("cancel")
+def coordination_cancel(
+    coordination_id: str = typer.Argument(..., help="Coordination session ID"),
+):
+    """Cancel a running coordination session (cooperative)."""
+    try:
+        cancel_flag = _ensure_state_dir() / f"{coordination_id}.cancel"
+        cancel_flag.touch(exist_ok=True)
+        console.print(f"[yellow]Cancel flag written: {cancel_flag}[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Failed to write cancel flag: {e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@coordination_app.command("dashboard")
+def coordination_dashboard(
+    coordination_id: Optional[str] = typer.Option(
+        None, "--id", help="Specific coordination ID"
+    ),
+    refresh_seconds: int = typer.Option(5, "--refresh", help="Refresh interval seconds"),
+    iterations: int = typer.Option(0, "--iterations", help="Stop after N iterations (0=run)"),
+):
+    """Show a simple real-time dashboard from persisted state."""
+    try:
+        import json
+        import time
+        from rich.live import Live
+
+        state_dir = _ensure_state_dir()
+
+        def _latest_id() -> Optional[str]:
+            files = sorted(state_dir.glob("coord_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            return files[0].stem if files else None
+
+        coord_id = coordination_id or _latest_id()
+        if not coord_id:
+            console.print("[yellow]No coordination sessions found[/yellow]")
+            return
+
+        state_file = state_dir / f"{coord_id}.json"
+        if not state_file.exists():
+            console.print(f"[yellow]No state found for {coord_id}[/yellow]")
+            raise typer.Exit(code=1)
+
+        def render() -> Table:
+            table = Table(title=f"Coordination Dashboard - {coord_id}")
+            table.add_column("Workflow", style="cyan")
+            table.add_column("Success", style="green")
+            table.add_column("Tokens", style="magenta")
+            table.add_column("Steps", style="yellow")
+            table.add_column("Time (s)", style="blue")
+            table.add_column("Error", style="red")
+
+            try:
+                with state_file.open("r", encoding="utf-8") as f:
+                    state = json.load(f)
+            except Exception:
+                state = {}
+
+            workflows = (state.get("workflow_results") or {})
+            for name, w in workflows.items():
+                table.add_row(
+                    name,
+                    str(w.get("success")),
+                    str(w.get("tokens_used", 0)),
+                    str(w.get("steps_completed", 0)),
+                    f"{(w.get('execution_time') or 0.0):.2f}",
+                    (w.get("error") or ""),
+                )
+
+            return table
+
+        loops = 0
+        with Live(render(), refresh_per_second=4) as live:
+            while iterations <= 0 or loops < iterations:
+                time.sleep(max(refresh_seconds, 1))
+                live.update(render())
+                loops += 1
+
+    except Exception as e:
+        console.print(f"[red]Dashboard error: {e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@coordination_app.command("report")
+def coordination_report(
+    coordination_id: str = typer.Argument(..., help="Coordination session ID"),
+    format: str = typer.Option("json", "--format", help="Report format (json/html/csv)"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", help="Output file (defaults to artifacts/reports)"
+    ),
+):
+    """Generate a simple coordination report."""
+    try:
+        import json
+        import csv
+
+        state_file = _ensure_state_dir() / f"{coordination_id}.json"
+        if not state_file.exists():
+            console.print(f"[yellow]No state found for {coordination_id}[/yellow]")
+            raise typer.Exit(code=1)
+
+        with state_file.open("r", encoding="utf-8") as f:
+            state = json.load(f)
+
+        out_dir = Path("artifacts/reports")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fmt = format.lower()
+        out_path = output or out_dir / f"{coordination_id}.{fmt}"
+
+        if fmt == "json":
+            with out_path.open("w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, default=_json_default)
+        elif fmt == "csv":
+            with out_path.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["workflow", "success", "tokens_used", "steps_completed", "execution_time", "error"])
+                for name, w in (state.get("workflow_results") or {}).items():
+                    writer.writerow([
+                        name,
+                        w.get("success"),
+                        w.get("tokens_used", 0),
+                        w.get("steps_completed", 0),
+                        w.get("execution_time", 0.0),
+                        (w.get("error") or ""),
+                    ])
+        elif fmt == "html":
+            rows = []
+            for name, w in (state.get("workflow_results") or {}).items():
+                rows.append(
+                    f"<tr><td>{name}</td><td>{w.get('success')}</td><td>{w.get('tokens_used',0)}</td><td>{w.get('steps_completed',0)}</td><td>{w.get('execution_time',0.0)}</td><td>{(w.get('error') or '')}</td></tr>"
+                )
+            html = f"""
+<!doctype html>
+<html><head><meta charset='utf-8'><title>{coordination_id} Report</title>
+<style>table{{border-collapse:collapse}}td,th{{border:1px solid #ccc;padding:4px}}</style></head>
+<body>
+<h1>Coordination Report - {coordination_id}</h1>
+<p>Status: {'SUCCESS' if state.get('success') else 'FAILED'}</p>
+<p>Tokens: {state.get('total_tokens_used',0)} | Time: {state.get('total_execution_time',0.0)}s | Efficiency: {state.get('parallel_efficiency',0.0):.2f}</p>
+<table><thead><tr><th>Workflow</th><th>Success</th><th>Tokens</th><th>Steps</th><th>Time(s)</th><th>Error</th></tr></thead>
+<tbody>
+{''.join(rows)}
+</tbody></table>
+</body></html>
+"""
+            with out_path.open("w", encoding="utf-8") as f:
+                f.write(html)
+        else:
+            console.print(f"[red]Unknown format: {format}[/red]")
+            raise typer.Exit(code=1)
+
+        console.print(f"[green]{_symbol(True)} Report written to {out_path}[/green]")
+    except Exception as e:
+        console.print(f"[red]Report error: {e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@coordination_app.command("history")
+def coordination_history(
+    days: int = typer.Option(7, "--days", help="Days of history to show"),
+    workflow_filter: Optional[str] = typer.Option(None, "--workflow", help="Filter by workflow name contains"),
+):
+    """Show recent coordination sessions from persisted state."""
+    try:
+        import json
+        import time
+
+        since = time.time() - days * 24 * 3600
+        state_dir = _ensure_state_dir()
+        files = sorted(state_dir.glob("coord_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        shown = 0
+        for f in files:
+            if f.stat().st_mtime < since:
+                continue
+            with f.open("r", encoding="utf-8") as fh:
+                state = json.load(fh)
+
+            if workflow_filter:
+                wfs = state.get("workflow_results") or {}
+                if not any(workflow_filter.lower() in name.lower() for name in wfs.keys()):
+                    continue
+
+            status = "SUCCESS" if state.get("success") else "FAILED"
+            console.print(f"{f.stem}  {status}  tokens={state.get('total_tokens_used',0)} time={state.get('total_execution_time',0.0):.2f}s")
+            shown += 1
+
+        if shown == 0:
+            console.print("[yellow]No sessions found in the requested window[/yellow]")
+    except Exception as e:
+        console.print(f"[red]History error: {e}[/red]")
+        raise typer.Exit(code=1)
 
 # Tools command group
 tools_app = typer.Typer(name="tools", help="Tool management commands")

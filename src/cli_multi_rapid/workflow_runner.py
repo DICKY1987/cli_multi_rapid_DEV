@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 CLI Orchestrator Workflow Runner
 
@@ -72,6 +72,39 @@ class WorkflowRunner:
         self.console = Console()
         self.coordinator = WorkflowCoordinator()
         self.scope_manager = FileScopeManager()
+        self._state_base = Path("state/coordination")
+
+    # --- Coordination state helpers ---
+    def _state_dir(self) -> Path:
+        self._state_base.mkdir(parents=True, exist_ok=True)
+        return self._state_base
+
+    def _state_file(self, coordination_id: str) -> Path:
+        return self._state_dir() / f"{coordination_id}.json"
+
+    def _cancel_file(self, coordination_id: str) -> Path:
+        return self._state_dir() / f"{coordination_id}.cancel"
+
+    def _persist_coordination_state(self, coordination_id: str, state: Dict[str, Any]) -> None:
+        try:
+            with self._state_file(coordination_id).open("w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+        except Exception:
+            # Non-fatal if persistence fails
+            pass
+
+    def _load_coordination_state(self, coordination_id: str) -> Optional[Dict[str, Any]]:
+        path = self._state_file(coordination_id)
+        if not path.exists():
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def _is_cancelled(self, coordination_id: str) -> bool:
+        return self._cancel_file(coordination_id).exists()
 
     def run(
         self,
@@ -156,7 +189,7 @@ class WorkflowRunner:
                 schema = json.load(f)
 
             jsonschema.validate(workflow, schema)
-            console.print("[green]✓ Workflow schema validation passed[/green]")
+            console.print("[green]OK Workflow schema validation passed[/green]")
             return True
 
         except ImportError:
@@ -227,7 +260,7 @@ class WorkflowRunner:
                     steps_completed=completed_steps,
                 )
 
-        console.print(f"[green]✓ Workflow completed: {completed_steps} steps[/green]")
+        console.print(f"[green]OK Workflow completed: {completed_steps} steps[/green]")
         return WorkflowResult(
             success=True,
             artifacts=artifacts,
@@ -349,15 +382,37 @@ class WorkflowRunner:
                     conflicts_detected=conflict_descriptions
                 )
 
+            # Initialize and persist coordination state
+            state: Dict[str, Any] = {
+                "coordination_id": coordination_id,
+                "status": "running" if not dry_run else "dry_run",
+                "started_at": datetime.now().isoformat(),
+                "mode": coordination_mode,
+                "max_parallel": max_parallel,
+                "budget": total_budget,
+                "input_files": [str(p) for p in workflow_files],
+                "workflow_results": {},
+                "conflicts_detected": [],
+            }
+            self._persist_coordination_state(coordination_id, state)
+
+            if self._is_cancelled(coordination_id):
+                return CoordinatedWorkflowResult(
+                    success=False,
+                    coordination_id=coordination_id,
+                    workflow_results={},
+                    conflicts_detected=["Coordination cancelled before start"],
+                )
+
             # Execute workflows based on coordination mode
             if coordination_mode == "parallel" and coordination_plan.parallel_groups:
                 workflow_results = self._execute_parallel_groups(
-                    workflows, coordination_plan, max_parallel, dry_run
+                    workflows, coordination_plan, max_parallel, dry_run, coordination_id
                 )
             else:
                 # Sequential execution
                 workflow_results = self._execute_sequential_workflows(
-                    workflows, coordination_plan, dry_run
+                    workflows, coordination_plan, dry_run, coordination_id
                 )
 
             # Calculate summary metrics
@@ -365,7 +420,7 @@ class WorkflowRunner:
             execution_time = time.time() - start_time
             success = all(result.success for result in workflow_results.values())
 
-            return CoordinatedWorkflowResult(
+            final = CoordinatedWorkflowResult(
                 success=success,
                 coordination_id=coordination_id,
                 workflow_results=workflow_results,
@@ -373,6 +428,28 @@ class WorkflowRunner:
                 total_execution_time=execution_time,
                 parallel_efficiency=self._calculate_parallel_efficiency(workflow_results, execution_time)
             )
+            # Persist final state
+            state.update(
+                {
+                    "status": "completed" if success else "failed",
+                    "total_tokens_used": final.total_tokens_used,
+                    "total_execution_time": final.total_execution_time,
+                    "parallel_efficiency": final.parallel_efficiency,
+                    "workflow_results": {
+                        k: {
+                            "success": v.success,
+                            "tokens_used": v.tokens_used,
+                            "steps_completed": v.steps_completed,
+                            "execution_time": v.execution_time,
+                            "error": v.error,
+                            "artifacts": v.artifacts,
+                        }
+                        for k, v in workflow_results.items()
+                    },
+                }
+            )
+            self._persist_coordination_state(coordination_id, state)
+            return final
 
         except Exception as e:
             return CoordinatedWorkflowResult(
@@ -497,13 +574,16 @@ class WorkflowRunner:
         workflows: List[Dict[str, Any]],
         coordination_plan: CoordinationPlan,
         max_parallel: int,
-        dry_run: bool
+        dry_run: bool,
+        coordination_id: Optional[str] = None,
     ) -> Dict[str, WorkflowResult]:
         """Execute workflows in parallel groups."""
 
         workflow_results = {}
 
         for group in coordination_plan.parallel_groups:
+            if coordination_id and self._is_cancelled(coordination_id):
+                break
             if len(group) == 1:
                 # Single workflow, execute normally
                 workflow_name = group[0]
@@ -511,6 +591,8 @@ class WorkflowRunner:
                 if workflow:
                     result = self._execute_workflow(workflow, dry_run=dry_run)
                     workflow_results[workflow_name] = result
+                    if coordination_id:
+                        self._update_partial_state(coordination_id, workflow_name, result)
             else:
                 # Multiple workflows, execute in parallel
                 with ThreadPoolExecutor(max_workers=min(max_parallel, len(group))) as executor:
@@ -527,11 +609,15 @@ class WorkflowRunner:
                         try:
                             result = future.result()
                             workflow_results[workflow_name] = result
+                            if coordination_id:
+                                self._update_partial_state(coordination_id, workflow_name, result)
                         except Exception as e:
                             workflow_results[workflow_name] = WorkflowResult(
                                 success=False,
                                 error=f"Parallel execution error: {str(e)}"
                             )
+                            if coordination_id:
+                                self._update_partial_state(coordination_id, workflow_name, workflow_results[workflow_name])
 
         return workflow_results
 
@@ -539,17 +625,23 @@ class WorkflowRunner:
         self,
         workflows: List[Dict[str, Any]],
         coordination_plan: CoordinationPlan,
-        dry_run: bool
+        dry_run: bool,
+        coordination_id: Optional[str] = None,
     ) -> Dict[str, WorkflowResult]:
         """Execute workflows sequentially."""
 
         workflow_results = {}
 
         for workflow_name in coordination_plan.execution_order:
+            if coordination_id and self._is_cancelled(coordination_id):
+                self.console.print("[yellow]Coordination cancelled â€” stopping sequential execution[/yellow]")
+                break
             workflow = next((w for w in workflows if w.get('name') == workflow_name), None)
             if workflow:
                 result = self._execute_workflow(workflow, dry_run=dry_run)
                 workflow_results[workflow_name] = result
+                if coordination_id:
+                    self._update_partial_state(coordination_id, workflow_name, result)
 
                 # Stop on failure if configured
                 if not result.success:
@@ -557,6 +649,109 @@ class WorkflowRunner:
                     break
 
         return workflow_results
+
+    def _update_partial_state(self, coordination_id: str, workflow_name: str, result: WorkflowResult) -> None:
+        state = self._load_coordination_state(coordination_id) or {}
+        wf = state.get("workflow_results", {})
+        wf[workflow_name] = {
+            "success": result.success,
+            "tokens_used": result.tokens_used,
+            "steps_completed": result.steps_completed,
+            "execution_time": result.execution_time,
+            "error": result.error,
+            "artifacts": result.artifacts,
+        }
+        state["workflow_results"] = wf
+        self._persist_coordination_state(coordination_id, state)
+
+    def resume_coordination(self, coordination_id: str) -> CoordinatedWorkflowResult:
+        """Resume a coordination session from persisted state (best-effort)."""
+        state = self._load_coordination_state(coordination_id)
+        if not state:
+            return CoordinatedWorkflowResult(
+                success=False,
+                coordination_id=coordination_id,
+                workflow_results={},
+                conflicts_detected=["No persisted state found"],
+            )
+
+        try:
+            input_files = [Path(p) for p in state.get("input_files", [])]
+            completed = set((state.get("workflow_results") or {}).keys())
+            # Reload workflows
+            workflows = []
+            for wf in input_files:
+                data = self._load_workflow(wf)
+                if data:
+                    workflows.append(data)
+
+            if not workflows:
+                return CoordinatedWorkflowResult(
+                    success=False,
+                    coordination_id=coordination_id,
+                    workflow_results={},
+                    conflicts_detected=["No valid workflows to resume"],
+                )
+
+            plan = self.coordinator.create_coordination_plan(workflows)
+            # Filter execution order to remaining workflows
+            remaining_order = [w for w in plan.execution_order if w not in completed]
+            plan.execution_order = remaining_order
+
+            # Execute remaining sequentially for simplicity
+            results = self._execute_sequential_workflows(workflows, plan, dry_run=False, coordination_id=coordination_id)
+            # Merge with previous results
+            merged: Dict[str, WorkflowResult] = {}
+            for name, prev in (state.get("workflow_results") or {}).items():
+                merged[name] = WorkflowResult(
+                    success=bool(prev.get("success")),
+                    tokens_used=int(prev.get("tokens_used", 0)),
+                    steps_completed=int(prev.get("steps_completed", 0)),
+                    execution_time=float(prev.get("execution_time")) if prev.get("execution_time") is not None else 0.0,
+                    error=prev.get("error"),
+                    artifacts=prev.get("artifacts") or [],
+                )
+            merged.update(results)
+
+            total_tokens = sum(r.tokens_used for r in merged.values())
+            execution_time = sum((r.execution_time or 0.0) for r in merged.values())
+            success = all(r.success for r in merged.values())
+
+            final = CoordinatedWorkflowResult(
+                success=success,
+                coordination_id=coordination_id,
+                workflow_results=merged,
+                total_tokens_used=total_tokens,
+                total_execution_time=execution_time,
+                parallel_efficiency=0.0,
+            )
+            # Persist final
+            self._persist_coordination_state(
+                coordination_id,
+                {
+                    **(state or {}),
+                    "status": "completed" if success else "failed",
+                    "workflow_results": {
+                        k: {
+                            "success": v.success,
+                            "tokens_used": v.tokens_used,
+                            "steps_completed": v.steps_completed,
+                            "execution_time": v.execution_time,
+                            "error": v.error,
+                            "artifacts": v.artifacts,
+                        }
+                        for k, v in merged.items()
+                    },
+                },
+            )
+            return final
+        except Exception as e:
+            return CoordinatedWorkflowResult(
+                success=False,
+                coordination_id=coordination_id,
+                workflow_results={},
+                conflicts_detected=[f"Resume error: {e}"],
+            )
 
     def _execute_parallel_phases(
         self,
@@ -674,3 +869,4 @@ class WorkflowRunner:
         efficiency = expected_parallel_time / total_time if total_time > 0 else 0.0
 
         return min(efficiency, 1.0)  # Cap at 100% efficiency
+
