@@ -8,7 +8,6 @@ Focuses on understanding code patterns, generating insights, and planning change
 
 import json
 import logging
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

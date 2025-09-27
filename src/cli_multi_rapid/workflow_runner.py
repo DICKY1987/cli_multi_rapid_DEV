@@ -10,9 +10,20 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+import time
+from datetime import datetime
 
 import yaml
 from rich.console import Console
+
+from .coordination import (
+    CoordinationMode,
+    CoordinationPlan,
+    WorkflowCoordinator,
+    FileScopeManager
+)
 
 console = Console()
 
@@ -26,10 +37,32 @@ class WorkflowResult:
     artifacts: List[str] = None
     tokens_used: int = 0
     steps_completed: int = 0
+    coordination_id: Optional[str] = None
+    execution_time: Optional[float] = None
+    parallel_groups: Optional[List[List[str]]] = None
 
     def __post_init__(self):
         if self.artifacts is None:
             self.artifacts = []
+        if self.parallel_groups is None:
+            self.parallel_groups = []
+
+
+@dataclass
+class CoordinatedWorkflowResult:
+    """Result from coordinated multi-workflow execution."""
+
+    success: bool
+    coordination_id: str
+    workflow_results: Dict[str, WorkflowResult]
+    total_tokens_used: int = 0
+    total_execution_time: float = 0.0
+    conflicts_detected: List[str] = None
+    parallel_efficiency: float = 0.0
+
+    def __post_init__(self):
+        if self.conflicts_detected is None:
+            self.conflicts_detected = []
 
 
 class WorkflowRunner:
@@ -37,6 +70,8 @@ class WorkflowRunner:
 
     def __init__(self):
         self.console = Console()
+        self.coordinator = WorkflowCoordinator()
+        self.scope_manager = FileScopeManager()
 
     def run(
         self,
@@ -45,6 +80,7 @@ class WorkflowRunner:
         files: Optional[str] = None,
         lane: Optional[str] = None,
         max_tokens: Optional[int] = None,
+        coordination_mode: str = "sequential",
     ) -> WorkflowResult:
         """Run a workflow with the given parameters."""
 
@@ -62,12 +98,22 @@ class WorkflowRunner:
                     success=False, error="Workflow schema validation failed"
                 )
 
-            # Execute workflow steps
-            result = self._execute_workflow(
-                workflow, dry_run=dry_run, files=files, lane=lane, max_tokens=max_tokens
-            )
+            # Check coordination mode and execute accordingly
+            coordination_mode_enum = CoordinationMode(coordination_mode)
 
-            return result
+            if coordination_mode_enum == CoordinationMode.PARALLEL:
+                return self._execute_parallel_workflow(
+                    workflow, dry_run=dry_run, files=files, lane=lane, max_tokens=max_tokens
+                )
+            elif coordination_mode_enum == CoordinationMode.IPT_WT:
+                return self._execute_ipt_wt_workflow(
+                    workflow, dry_run=dry_run, files=files, lane=lane, max_tokens=max_tokens
+                )
+            else:
+                # Sequential execution (default)
+                return self._execute_workflow(
+                    workflow, dry_run=dry_run, files=files, lane=lane, max_tokens=max_tokens
+                )
 
         except Exception as e:
             return WorkflowResult(
@@ -257,3 +303,374 @@ class WorkflowRunner:
             return WorkflowResult(success=True, artifacts=[str(artifact_path)], steps_completed=len(phases))
         except Exception as e:
             return WorkflowResult(success=False, error=f"ipt/wt workflow error: {e}")
+
+    def run_coordinated_workflows(
+        self,
+        workflow_files: List[Path],
+        coordination_mode: str = "parallel",
+        max_parallel: int = 3,
+        total_budget: Optional[float] = None,
+        dry_run: bool = False,
+    ) -> CoordinatedWorkflowResult:
+        """Run multiple workflows with coordination."""
+
+        start_time = time.time()
+        coordination_id = f"coord_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        try:
+            # Load all workflows
+            workflows = []
+            for workflow_file in workflow_files:
+                workflow = self._load_workflow(workflow_file)
+                if workflow:
+                    workflow['_file_path'] = str(workflow_file)
+                    workflows.append(workflow)
+
+            if not workflows:
+                return CoordinatedWorkflowResult(
+                    success=False,
+                    coordination_id=coordination_id,
+                    workflow_results={},
+                    conflicts_detected=["No valid workflows loaded"]
+                )
+
+            # Create coordination plan
+            coordination_plan = self.coordinator.create_coordination_plan(workflows)
+
+            if coordination_plan.conflicts:
+                conflict_descriptions = [
+                    f"Conflict between {', '.join(c.workflow_ids)} on {', '.join(c.conflicting_patterns)}"
+                    for c in coordination_plan.conflicts
+                ]
+                return CoordinatedWorkflowResult(
+                    success=False,
+                    coordination_id=coordination_id,
+                    workflow_results={},
+                    conflicts_detected=conflict_descriptions
+                )
+
+            # Execute workflows based on coordination mode
+            if coordination_mode == "parallel" and coordination_plan.parallel_groups:
+                workflow_results = self._execute_parallel_groups(
+                    workflows, coordination_plan, max_parallel, dry_run
+                )
+            else:
+                # Sequential execution
+                workflow_results = self._execute_sequential_workflows(
+                    workflows, coordination_plan, dry_run
+                )
+
+            # Calculate summary metrics
+            total_tokens = sum(result.tokens_used for result in workflow_results.values())
+            execution_time = time.time() - start_time
+            success = all(result.success for result in workflow_results.values())
+
+            return CoordinatedWorkflowResult(
+                success=success,
+                coordination_id=coordination_id,
+                workflow_results=workflow_results,
+                total_tokens_used=total_tokens,
+                total_execution_time=execution_time,
+                parallel_efficiency=self._calculate_parallel_efficiency(workflow_results, execution_time)
+            )
+
+        except Exception as e:
+            return CoordinatedWorkflowResult(
+                success=False,
+                coordination_id=coordination_id,
+                workflow_results={},
+                conflicts_detected=[f"Coordination error: {str(e)}"]
+            )
+
+    def _execute_parallel_workflow(
+        self,
+        workflow: Dict[str, Any],
+        dry_run: bool = False,
+        files: Optional[str] = None,
+        lane: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> WorkflowResult:
+        """Execute workflow with parallel phase support."""
+
+        start_time = time.time()
+
+        # Check for parallel phases
+        phases = workflow.get('phases', [])
+        parallel_phases = [phase for phase in phases if phase.get('parallel', False)]
+
+        if parallel_phases:
+            # Execute with parallel coordination
+            coordination_plan = self.coordinator.create_coordination_plan([workflow])
+
+            if coordination_plan.conflicts:
+                return WorkflowResult(
+                    success=False,
+                    error=f"File scope conflicts detected: {coordination_plan.conflicts}",
+                    execution_time=time.time() - start_time
+                )
+
+            # Execute parallel phases
+            results = self._execute_parallel_phases(phases, dry_run, files, max_tokens)
+
+            total_tokens = sum(r.get("tokens_used", 0) for r in results)
+            total_artifacts = []
+            for r in results:
+                total_artifacts.extend(r.get("artifacts", []))
+
+            success = all(r.get("success", False) for r in results)
+
+            return WorkflowResult(
+                success=success,
+                tokens_used=total_tokens,
+                artifacts=total_artifacts,
+                steps_completed=len(results),
+                execution_time=time.time() - start_time,
+                parallel_groups=[str(i) for i in range(len(parallel_phases))]
+            )
+        else:
+            # Fall back to sequential execution
+            return self._execute_workflow(
+                workflow, dry_run=dry_run, files=files, lane=lane, max_tokens=max_tokens
+            )
+
+    def _execute_ipt_wt_workflow(
+        self,
+        workflow: Dict[str, Any],
+        dry_run: bool = False,
+        files: Optional[str] = None,
+        lane: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> WorkflowResult:
+        """Execute IPT-WT pattern workflow with enhanced coordination."""
+
+        start_time = time.time()
+
+        # Check for IPT-WT structure
+        roles = workflow.get("roles", {})
+        phases = workflow.get("phases", [])
+
+        if not roles or not phases:
+            return WorkflowResult(
+                success=False,
+                error="Invalid IPT-WT workflow structure",
+                execution_time=time.time() - start_time
+            )
+
+        # Execute phases with role-based coordination
+        ipt_phases = [p for p in phases if p.get('role') == 'ipt']
+        wt_phases = [p for p in phases if p.get('role') == 'wt']
+
+        results = []
+
+        # Execute IPT phases first (planning)
+        for phase in ipt_phases:
+            phase_result = self._execute_phase(phase, dry_run, files)
+            results.append(phase_result)
+
+        # Execute WT phases (potentially in parallel)
+        wt_parallel = any(p.get('parallel', False) for p in wt_phases)
+        if wt_parallel and not dry_run:
+            wt_results = self._execute_parallel_phases(wt_phases, dry_run, files, max_tokens)
+            results.extend(wt_results)
+        else:
+            for phase in wt_phases:
+                phase_result = self._execute_phase(phase, dry_run, files)
+                results.append(phase_result)
+
+        total_tokens = sum(r.get("tokens_used", 0) for r in results)
+        total_artifacts = []
+        for r in results:
+            total_artifacts.extend(r.get("artifacts", []))
+
+        success = all(r.get("success", False) for r in results)
+
+        return WorkflowResult(
+            success=success,
+            tokens_used=total_tokens,
+            artifacts=total_artifacts,
+            steps_completed=len(results),
+            execution_time=time.time() - start_time
+        )
+
+    def _execute_parallel_groups(
+        self,
+        workflows: List[Dict[str, Any]],
+        coordination_plan: CoordinationPlan,
+        max_parallel: int,
+        dry_run: bool
+    ) -> Dict[str, WorkflowResult]:
+        """Execute workflows in parallel groups."""
+
+        workflow_results = {}
+
+        for group in coordination_plan.parallel_groups:
+            if len(group) == 1:
+                # Single workflow, execute normally
+                workflow_name = group[0]
+                workflow = next((w for w in workflows if w.get('name') == workflow_name), None)
+                if workflow:
+                    result = self._execute_workflow(workflow, dry_run=dry_run)
+                    workflow_results[workflow_name] = result
+            else:
+                # Multiple workflows, execute in parallel
+                with ThreadPoolExecutor(max_workers=min(max_parallel, len(group))) as executor:
+                    future_to_workflow = {}
+
+                    for workflow_name in group:
+                        workflow = next((w for w in workflows if w.get('name') == workflow_name), None)
+                        if workflow:
+                            future = executor.submit(self._execute_workflow, workflow, dry_run)
+                            future_to_workflow[future] = workflow_name
+
+                    for future in as_completed(future_to_workflow):
+                        workflow_name = future_to_workflow[future]
+                        try:
+                            result = future.result()
+                            workflow_results[workflow_name] = result
+                        except Exception as e:
+                            workflow_results[workflow_name] = WorkflowResult(
+                                success=False,
+                                error=f"Parallel execution error: {str(e)}"
+                            )
+
+        return workflow_results
+
+    def _execute_sequential_workflows(
+        self,
+        workflows: List[Dict[str, Any]],
+        coordination_plan: CoordinationPlan,
+        dry_run: bool
+    ) -> Dict[str, WorkflowResult]:
+        """Execute workflows sequentially."""
+
+        workflow_results = {}
+
+        for workflow_name in coordination_plan.execution_order:
+            workflow = next((w for w in workflows if w.get('name') == workflow_name), None)
+            if workflow:
+                result = self._execute_workflow(workflow, dry_run=dry_run)
+                workflow_results[workflow_name] = result
+
+                # Stop on failure if configured
+                if not result.success:
+                    self.console.print(f"[red]Workflow {workflow_name} failed, stopping execution[/red]")
+                    break
+
+        return workflow_results
+
+    def _execute_parallel_phases(
+        self,
+        phases: List[Dict[str, Any]],
+        dry_run: bool,
+        files: Optional[str],
+        max_tokens: Optional[int]
+    ) -> List[Dict[str, Any]]:
+        """Execute phases in parallel."""
+
+        if dry_run:
+            # Simulate parallel execution for dry run
+            results = []
+            for phase in phases:
+                results.append({
+                    "success": True,
+                    "tokens_used": 0,
+                    "artifacts": [],
+                    "output": f"DRY RUN: Phase {phase.get('id', 'unknown')}"
+                })
+            return results
+
+        # Execute phases in parallel
+        with ThreadPoolExecutor(max_workers=min(3, len(phases))) as executor:
+            future_to_phase = {
+                executor.submit(self._execute_phase, phase, dry_run, files): phase
+                for phase in phases
+            }
+
+            results = []
+            for future in as_completed(future_to_phase):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    results.append({
+                        "success": False,
+                        "error": f"Phase execution error: {str(e)}",
+                        "tokens_used": 0,
+                        "artifacts": []
+                    })
+
+        return results
+
+    def _execute_phase(
+        self,
+        phase: Dict[str, Any],
+        dry_run: bool,
+        files: Optional[str]
+    ) -> Dict[str, Any]:
+        """Execute a single workflow phase."""
+
+        phase_id = phase.get('id', 'unknown')
+        tasks = phase.get('tasks', [])
+
+        if dry_run:
+            return {
+                "success": True,
+                "tokens_used": 0,
+                "artifacts": [],
+                "output": f"DRY RUN: Phase {phase_id} with {len(tasks)} tasks"
+            }
+
+        # Execute tasks in the phase
+        total_tokens = 0
+        artifacts = []
+
+        for task in tasks:
+            # Convert task to step format for execution
+            if isinstance(task, str):
+                step = {"id": task, "actor": "unknown", "name": task}
+            else:
+                step = task
+
+            step_result = self._execute_step(step, files=files)
+            total_tokens += step_result.get("tokens_used", 0)
+            artifacts.extend(step_result.get("artifacts", []))
+
+            if not step_result.get("success", False):
+                return {
+                    "success": False,
+                    "error": f"Task {task} failed",
+                    "tokens_used": total_tokens,
+                    "artifacts": artifacts
+                }
+
+        return {
+            "success": True,
+            "tokens_used": total_tokens,
+            "artifacts": artifacts,
+            "output": f"Phase {phase_id} completed successfully"
+        }
+
+    def _calculate_parallel_efficiency(
+        self,
+        workflow_results: Dict[str, WorkflowResult],
+        total_time: float
+    ) -> float:
+        """Calculate parallelization efficiency."""
+
+        if not workflow_results or total_time <= 0:
+            return 0.0
+
+        # Sum individual execution times
+        individual_times = sum(
+            result.execution_time or 0.0 for result in workflow_results.values()
+        )
+
+        if individual_times <= 0:
+            return 0.0
+
+        # Efficiency = (sum of individual times) / (total parallel time * number of workflows)
+        # Values closer to 1.0 indicate better parallel efficiency
+        expected_parallel_time = individual_times / len(workflow_results)
+        efficiency = expected_parallel_time / total_time if total_time > 0 else 0.0
+
+        return min(efficiency, 1.0)  # Cap at 100% efficiency

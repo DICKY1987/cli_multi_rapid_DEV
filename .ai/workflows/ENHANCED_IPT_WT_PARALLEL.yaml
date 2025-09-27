@@ -1,0 +1,191 @@
+name: "Enhanced IPT-WT Parallel Workflow"
+version: "2.0"
+description: "Multi-agent IPT-WT workflow with parallel execution capabilities and file scope management"
+
+metadata:
+  orchestration_pattern: "ipt_wt"
+  cost_budget: 15.0
+  coordination:
+    file_scope:
+      - "src/**/*.py"
+      - "tests/**/*.py"
+      - ".ai/**/*.yaml"
+    scope_mode: "exclusive"
+    risk_level: "medium"
+    max_parallel: 3
+    priority: 3
+    branch_strategy: "coordination"
+    merge_queue:
+      enabled: true
+      verification_level: "standard"
+      quality_gates: ["lint", "test", "typecheck"]
+
+roles:
+  ipt:
+    tools: ["ai_analyst", "ai_editor", "contract_validator"]
+    responsibilities:
+      - "Analyze requirements and create execution plan"
+      - "Validate constraints and preconditions"
+      - "Generate detailed task specifications"
+
+  wt:
+    tools: ["code_fixers", "pytest_runner", "vscode_diagnostics", "syntax_validator"]
+    responsibilities:
+      - "Execute deterministic code modifications"
+      - "Run tests and validation"
+      - "Apply formatting and style fixes"
+
+  coordinator:
+    tools: ["git_ops", "merge_queue_processor", "cost_tracker"]
+    responsibilities:
+      - "Coordinate parallel execution"
+      - "Manage merge queue"
+      - "Track costs and budget compliance"
+
+phases:
+  - id: "planning"
+    name: "Initial Planning and Analysis"
+    role: "ipt"
+    priority: 10
+    tasks:
+      - name: "Analyze codebase structure"
+        actor: "ai_analyst"
+        file_scope: ["src/**/*.py"]
+        scope_mode: "read-only"
+        with:
+          analysis_type: "code_review"
+          detail_level: "medium"
+      - name: "Generate modification plan"
+        actor: "ai_editor"
+        with:
+          strategy: "minimal-diff"
+          context:
+            analysis_results: "artifacts/analysis.json"
+      - name: "Validate constraints"
+        actor: "contract_validator"
+        with:
+          contract_file: "artifacts/modification_plan.json"
+    timeout_minutes: 10
+
+  - id: "validation"
+    name: "Pre-execution Validation"
+    role: "wt"
+    depends_on: ["planning"]
+    priority: 8
+    tasks:
+      - name: "Run diagnostic checks"
+        actor: "vscode_diagnostics"
+        file_scope: ["src/**/*.py"]
+        scope_mode: "read-only"
+        with:
+          analyzers: ["python", "ruff", "mypy"]
+      - name: "Validate syntax"
+        actor: "syntax_validator"
+        file_scope: ["src/**/*.py"]
+        scope_mode: "read-only"
+    timeout_minutes: 5
+
+  - id: "parallel_execution"
+    name: "Parallel Code Modifications"
+    role: "wt"
+    depends_on: ["validation"]
+    parallel: true
+    priority: 5
+    file_scope: ["src/**/*.py"]
+    scope_mode: "exclusive"
+    tasks:
+      - name: "Apply formatting fixes"
+        actor: "code_fixers"
+        file_scope: ["src/**/*.py"]
+        with:
+          tools: ["black", "isort"]
+      - name: "Fix linting issues"
+        actor: "code_fixers"
+        file_scope: ["src/**/*.py"]
+        with:
+          tools: ["ruff"]
+      - name: "Type checking fixes"
+        actor: "syntax_validator"
+        file_scope: ["src/**/*.py"]
+        with:
+          validator_type: "mypy"
+    timeout_minutes: 15
+
+  - id: "test_execution"
+    name: "Test Suite Execution"
+    role: "wt"
+    depends_on: ["parallel_execution"]
+    priority: 7
+    file_scope: ["tests/**/*.py", "src/**/*.py"]
+    scope_mode: "read-only"
+    tasks:
+      - name: "Run full test suite"
+        actor: "pytest_runner"
+        with:
+          path: "tests/"
+          coverage: true
+    timeout_minutes: 20
+
+  - id: "verification"
+    name: "Quality Gate Verification"
+    role: "coordinator"
+    depends_on: ["test_execution"]
+    priority: 9
+    tasks:
+      - name: "Verify all tests pass"
+        actor: "verifier"
+        with:
+          checks:
+            - type: "tests_pass"
+              from: "artifacts/test_results.json"
+            - type: "diff_limits"
+              max_files: 50
+              max_insertions: 500
+      - name: "Check budget compliance"
+        actor: "cost_tracker"
+        with:
+          coordination_id: "${COORDINATION_ID}"
+          budget_check: true
+    timeout_minutes: 5
+
+  - id: "integration"
+    name: "Git Integration and Merge Queue"
+    role: "coordinator"
+    depends_on: ["verification"]
+    priority: 10
+    tasks:
+      - name: "Create coordination branches"
+        actor: "git_ops"
+        with:
+          operation: "create_coordination_branches"
+          workflows: ["${WORKFLOW_NAME}"]
+      - name: "Setup merge queue"
+        actor: "git_ops"
+        with:
+          operation: "setup_merge_queue"
+          branches: ["${COORDINATION_BRANCH}"]
+          verification_level: "standard"
+      - name: "Execute merge queue"
+        actor: "git_ops"
+        with:
+          operation: "execute_merge_queue"
+          queue_config: "artifacts/merge_queue_config.json"
+    timeout_minutes: 10
+
+# Traditional step format for backwards compatibility
+steps:
+  - id: "1.001"
+    name: "Initialize Coordination Session"
+    actor: "git_ops"
+    with:
+      operation: "status"
+    emits: ["artifacts/git_status.json"]
+
+inputs:
+  files: ["src/**/*.py", "tests/**/*.py"]
+  lane: "lane/enhanced-ipt-wt/coordination"
+
+policy:
+  max_tokens: 50000
+  prefer_deterministic: true
+  timeout_minutes: 60
