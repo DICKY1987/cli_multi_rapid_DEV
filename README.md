@@ -159,3 +159,7 @@ tests for any new functionality.
 ## VS Code
 
 See `VSCODE_SETUP.md` for available tasks, debug configurations, and how to optionally merge the Codex configuration package from `CODEX_IMPLEMENTATION/vscode_configuration/` into `.vscode` with a backup.
+
+## Coordination
+See docs/coordination/COORDINATION_GUIDE.md for usage and configuration details.
+
