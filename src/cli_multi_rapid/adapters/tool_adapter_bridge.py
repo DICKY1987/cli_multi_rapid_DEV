@@ -11,7 +11,12 @@ class ToolAdapterBridge(BaseAdapter):
     """Bridge adapter that connects tool integrations to the orchestrator."""
 
     def __init__(self, tool_type: str, dry_run: bool = False):
-        super().__init__()
+        from .base_adapter import AdapterType
+        super().__init__(
+            name=f"tool_{tool_type}",
+            adapter_type=AdapterType.DETERMINISTIC,
+            description=f"Bridge adapter for {tool_type} tool integration"
+        )
         self.tool_type = tool_type
 
         # Import here to avoid circular imports
@@ -267,3 +272,12 @@ class ToolAdapterBridge(BaseAdapter):
             output=result.stdout if hasattr(result, "stdout") else str(result.version),
             artifacts={"command_result": result},
         )
+
+    def validate_step(self, step: Dict[str, Any]) -> bool:
+        """Validate that this adapter can execute the given step."""
+        # ToolAdapterBridge can handle most steps as it's a generic bridge
+        return "operation" in step or "tool_type" in step
+
+    def estimate_cost(self, step: Dict[str, Any]) -> int:
+        """Estimate token cost (0 for deterministic tool operations)."""
+        return 0

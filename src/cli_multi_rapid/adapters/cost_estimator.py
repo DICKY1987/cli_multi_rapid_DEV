@@ -8,12 +8,11 @@ cost model and emits a structured artifact.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from .base_adapter import AdapterResult, AdapterType, BaseAdapter
 from ..router import Router
+from .base_adapter import AdapterResult, AdapterType, BaseAdapter
 
 
 class CostEstimatorAdapter(BaseAdapter):
@@ -42,7 +41,7 @@ class CostEstimatorAdapter(BaseAdapter):
                 return AdapterResult(success=False, error=f"Workflow not found: {workflow_path}")
 
             import yaml
-            with open(workflow_path, "r", encoding="utf-8") as f:
+            with open(workflow_path, encoding="utf-8") as f:
                 workflow = yaml.safe_load(f) or {}
 
             router = Router()

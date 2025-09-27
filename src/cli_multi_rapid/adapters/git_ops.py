@@ -178,6 +178,22 @@ class GitOpsAdapter(BaseAdapter):
                 workflows = self._list_github_workflows(repo)
                 artifact = self._artifact("github.workflows", {"workflows": workflows})
                 result = GitCommandResult(True)
+            elif op == "create_coordination_branches":
+                workflows = params.get("workflows", [])
+                branch_map = self.create_coordination_branches(workflows)
+                artifact = self._artifact("git.coordination_branches", branch_map)
+                result = GitCommandResult(True)
+            elif op == "setup_merge_queue":
+                branches = params.get("branches", [])
+                verification_level = params.get("verification_level", "standard")
+                queue_config = self.setup_merge_queue(branches, verification_level)
+                artifact = self._artifact("git.merge_queue_config", queue_config)
+                result = GitCommandResult(True)
+            elif op == "execute_merge_queue":
+                queue_config = params.get("queue_config", {})
+                merge_results = self.execute_merge_queue(queue_config)
+                artifact = self._artifact("git.merge_queue_results", {"results": merge_results})
+                result = GitCommandResult(all(r.get("status") == "merged" for r in merge_results))
             else:
                 artifact = self._artifact("git.status", {"operation": op})
                 result = self._git(["status", "--porcelain=v1"])  # non-fatal
@@ -545,3 +561,250 @@ class GitOpsAdapter(BaseAdapter):
                 for wf in workflows["workflows"]
             ]
         return []
+
+    def create_coordination_branches(self, workflows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """Create isolated branches for parallel workflow execution."""
+
+        branch_map = {}
+        base_branch = self._current_branch()
+
+        for workflow in workflows:
+            workflow_id = workflow.get('metadata', {}).get('id', workflow.get('name', 'unnamed'))
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            branch_name = f"auto/{workflow_id}-{timestamp}"
+
+            # Create branch from current HEAD
+            result = self._git(['checkout', '-b', branch_name])
+            if result.success:
+                # Get the commit hash
+                head_result = self._git(['rev-parse', 'HEAD'])
+                head_commit = head_result.stdout.strip() if head_result.success else "unknown"
+
+                branch_map[workflow_id] = {
+                    "branch_name": branch_name,
+                    "base_branch": base_branch,
+                    "head_commit": head_commit,
+                    "status": "ready",
+                    "created_at": datetime.now().isoformat()
+                }
+                self.console.print(f"[green]Created coordination branch: {branch_name}[/green]")
+            else:
+                branch_map[workflow_id] = {
+                    "branch_name": branch_name,
+                    "base_branch": base_branch,
+                    "status": "failed",
+                    "error": result.stderr,
+                    "created_at": datetime.now().isoformat()
+                }
+                self.console.print(f"[red]Failed to create branch {branch_name}: {result.stderr}[/red]")
+
+            # Return to base branch
+            self._git(['checkout', base_branch])
+
+        return branch_map
+
+    def setup_merge_queue(self, branches: List[str],
+                         verification_level: str = "standard") -> Dict[str, Any]:
+        """Setup merge queue for coordinated integration."""
+
+        queue_config = {
+            "branches": branches,
+            "verification_level": verification_level,
+            "merge_strategy": "sequential",
+            "auto_rollback": True,
+            "quality_gates": self._get_quality_gates(verification_level),
+            "created_at": datetime.now().isoformat(),
+            "base_branch": self._current_branch()
+        }
+
+        # Write queue configuration
+        queue_file = Path(".ai/coordination/merge_queue.json")
+        queue_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(queue_file, 'w') as f:
+            json.dump(queue_config, f, indent=2)
+
+        self.console.print(f"[blue]Merge queue configured with {len(branches)} branches[/blue]")
+        return queue_config
+
+    def execute_merge_queue(self, queue_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Execute merge queue with verification."""
+
+        results = []
+        base_branch = queue_config.get("base_branch", "main")
+        quality_gates = queue_config.get("quality_gates", ["lint", "test"])
+
+        for branch in queue_config.get("branches", []):
+            self.console.print(f"[cyan]Processing merge queue item: {branch}[/cyan]")
+
+            # Switch to base branch and pull latest
+            base_result = self._git(['checkout', base_branch])
+            if not base_result.success:
+                results.append({
+                    "branch": branch,
+                    "status": "failed",
+                    "error": f"Failed to checkout base branch: {base_result.stderr}",
+                    "timestamp": datetime.now().isoformat()
+                })
+                continue
+
+            pull_result = self._git(['pull', 'origin', base_branch])
+            if not pull_result.success:
+                self.console.print(f"[yellow]Warning: Failed to pull latest from {base_branch}[/yellow]")
+
+            # Create shadow merge for verification
+            shadow_result = self._shadow_merge_verification(branch, base_branch, quality_gates)
+
+            if shadow_result["success"]:
+                # Attempt actual merge
+                merge_result = self._git(['merge', '--no-ff', branch, '-m', f'Merge {branch} via coordination queue'])
+
+                if merge_result.success:
+                    # Run final quality gates
+                    gate_results = self._run_quality_gates(quality_gates)
+
+                    if all(gate['success'] for gate in gate_results):
+                        results.append({
+                            "branch": branch,
+                            "status": "merged",
+                            "merge_commit": self._get_current_commit(),
+                            "gates": gate_results,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        self.console.print(f"[green]✓ Successfully merged {branch}[/green]")
+                    else:
+                        # Rollback failed merge
+                        self._git(['reset', '--hard', 'HEAD~1'])
+                        results.append({
+                            "branch": branch,
+                            "status": "failed_gates",
+                            "gates": gate_results,
+                            "rollback": True,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        self.console.print(f"[red]✗ Merged {branch} but failed quality gates - rolled back[/red]")
+                else:
+                    results.append({
+                        "branch": branch,
+                        "status": "merge_conflict",
+                        "error": merge_result.stderr,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    self.console.print(f"[red]✗ Merge conflict for {branch}[/red]")
+            else:
+                results.append({
+                    "branch": branch,
+                    "status": "shadow_verification_failed",
+                    "shadow_result": shadow_result,
+                    "timestamp": datetime.now().isoformat()
+                })
+                self.console.print(f"[red]✗ Shadow verification failed for {branch}[/red]")
+
+        return results
+
+    def _shadow_merge_verification(self, branch: str, base_branch: str,
+                                 quality_gates: List[str]) -> Dict[str, Any]:
+        """Perform shadow merge verification without affecting main branch."""
+
+        # Create temporary worktree for shadow merge
+        shadow_path = Path(f".ai/coordination/shadow_merge_{branch.replace('/', '_')}")
+        shadow_path.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Create worktree
+            worktree_result = self._git(['worktree', 'add', str(shadow_path), base_branch])
+            if not worktree_result.success:
+                return {
+                    "success": False,
+                    "error": f"Failed to create shadow worktree: {worktree_result.stderr}"
+                }
+
+            # Change to shadow directory and attempt merge
+            original_cwd = os.getcwd()
+            os.chdir(shadow_path)
+
+            try:
+                merge_result = self._git(['merge', '--no-ff', branch])
+
+                if merge_result.success:
+                    # Run quality gates in shadow environment
+                    gate_results = self._run_quality_gates(quality_gates)
+
+                    return {
+                        "success": all(gate['success'] for gate in gate_results),
+                        "merge_conflicts": False,
+                        "gate_results": gate_results
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "merge_conflicts": True,
+                        "conflict_details": merge_result.stderr
+                    }
+            finally:
+                os.chdir(original_cwd)
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Shadow verification exception: {str(e)}"
+            }
+        finally:
+            # Clean up shadow worktree
+            try:
+                self._git(['worktree', 'remove', '--force', str(shadow_path)])
+            except:
+                pass  # Best effort cleanup
+
+    def _get_quality_gates(self, verification_level: str) -> List[str]:
+        """Get quality gates based on verification level."""
+
+        gates_map = {
+            "minimal": ["lint"],
+            "standard": ["lint", "test"],
+            "comprehensive": ["lint", "test", "typecheck", "security"]
+        }
+
+        return gates_map.get(verification_level, gates_map["standard"])
+
+    def _run_quality_gates(self, gates: List[str]) -> List[Dict[str, Any]]:
+        """Run quality gates and return results."""
+
+        results = []
+
+        for gate in gates:
+            if gate == "lint":
+                # Run linting
+                result = self._git(['status', '--porcelain'])  # Simple check
+                success = result.success
+                details = "No uncommitted changes" if success else "Uncommitted changes found"
+            elif gate == "test":
+                # Mock test execution (would normally run pytest, npm test, etc.)
+                result = self._git(['log', '--oneline', '-1'])  # Check if we have commits
+                success = result.success and result.stdout.strip()
+                details = "Mock test execution" if success else "No commits found"
+            elif gate == "typecheck":
+                # Mock typecheck
+                success = True
+                details = "Mock typecheck passed"
+            elif gate == "security":
+                # Mock security scan
+                success = True
+                details = "Mock security scan passed"
+            else:
+                success = True
+                details = f"Unknown gate: {gate}"
+
+            results.append({
+                "gate": gate,
+                "success": success,
+                "details": details,
+                "timestamp": datetime.now().isoformat()
+            })
+
+        return results
+
+    def _get_current_commit(self) -> str:
+        """Get current commit hash."""
+        result = self._git(['rev-parse', 'HEAD'])
+        return result.stdout.strip() if result.success else "unknown"

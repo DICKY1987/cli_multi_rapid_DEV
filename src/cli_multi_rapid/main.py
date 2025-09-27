@@ -6,6 +6,7 @@ Provides the main command-line interface for the deterministic, schema-driven
 CLI orchestrator that routes between deterministic tools and AI agents.
 """
 
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +20,14 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 console = Console()
+
+
+# Cross-platform safe success/failure symbols (avoid Unicode on legacy Windows)
+def _symbol(ok: bool) -> str:
+    enc = (getattr(sys.stdout, "encoding", None) or "").lower()
+    if "utf" in enc:
+        return "✓" if ok else "✗"
+    return "OK" if ok else "FAIL"
 
 
 @app.command("codegen-models")
@@ -81,9 +90,9 @@ def run_workflow(
             max_tokens=max_tokens,
         )
         if result.success:
-            console.print("[green]✓ Workflow completed successfully[/green]")
+            console.print(f"[green]{_symbol(True)} Workflow completed successfully[/green]")
         else:
-            console.print(f"[red]✗ Workflow failed: {result.error}[/red]")
+            console.print(f"[red]{_symbol(False)} Workflow failed: {result.error}[/red]")
             raise typer.Exit(code=1)
     except ImportError:
         console.print("[red]CLI orchestrator workflow runner not available[/red]")
@@ -106,9 +115,9 @@ def verify_artifact(
         verifier = Verifier()
         is_valid = verifier.verify_artifact(artifact_file, schema_file)
         if is_valid:
-            console.print("[green]✓ Artifact is valid[/green]")
+            console.print(f"[green]{_symbol(True)} Artifact is valid[/green]")
         else:
-            console.print("[red]✗ Artifact validation failed[/red]")
+            console.print(f"[red]{_symbol(False)} Artifact validation failed[/red]")
             raise typer.Exit(code=1)
     except ImportError:
         console.print("[red]CLI orchestrator verifier not available[/red]")
@@ -245,7 +254,7 @@ def tools_list():
         table.add_column("Path", style="dim")
 
         for name, probe in probes.items():
-            status = "✓" if probe.ok else "✗"
+            status = _symbol(probe.ok)
             version = probe.version or "unknown"
             path = probe.path or "not found"
             table.add_row(name, status, version, path)
@@ -270,9 +279,9 @@ def tools_versions():
 
         for name, probe in probes.items():
             if probe.ok and probe.version:
-                console.print(f"✓ {name}: {probe.version}")
+                console.print(f"{_symbol(True)} {name}: {probe.version}")
             else:
-                console.print(f"✗ {name}: not available")
+                console.print(f"{_symbol(False)} {name}: not available")
 
     except ImportError:
         console.print("[red]Tool integration layer not available[/red]")
@@ -310,7 +319,8 @@ def quality_run(
 
         # Display results
         for tool_name, result in results.items():
-            status = "✓ PASS" if result.code == 0 else "✗ FAIL"
+            ok = result.code == 0
+            status = f"{_symbol(ok)} {'PASS' if ok else 'FAIL'}"
             console.print(f"{status} {tool_name} ({result.duration_s:.2f}s)")
 
             if result.stdout:
@@ -357,9 +367,9 @@ def containers_up(
         result = containers.compose_up(compose_file=compose_file, detach=detach)
 
         if result.code == 0:
-            console.print("[green]✓ Containers started successfully[/green]")
+            console.print(f"[green]{_symbol(True)} Containers started successfully[/green]")
         else:
-            console.print(f"[red]✗ Failed to start containers: {result.stderr}[/red]")
+            console.print(f"[red]{_symbol(False)} Failed to start containers: {result.stderr}[/red]")
             raise typer.Exit(code=1)
 
     except ImportError:
@@ -386,9 +396,9 @@ def containers_down(
         result = containers.compose_down(compose_file=compose_file)
 
         if result.code == 0:
-            console.print("[green]✓ Containers stopped successfully[/green]")
+            console.print(f"[green]{_symbol(True)} Containers stopped successfully[/green]")
         else:
-            console.print(f"[red]✗ Failed to stop containers: {result.stderr}[/red]")
+            console.print(f"[red]{_symbol(False)} Failed to stop containers: {result.stderr}[/red]")
             raise typer.Exit(code=1)
 
     except ImportError:
@@ -412,7 +422,7 @@ def containers_ps():
             console.print("[bold blue]Running Containers:[/bold blue]")
             console.print(result.stdout)
         else:
-            console.print(f"[red]✗ Failed to list containers: {result.stderr}[/red]")
+            console.print(f"[red]{_symbol(False)} Failed to list containers: {result.stderr}[/red]")
             raise typer.Exit(code=1)
 
     except ImportError:
@@ -444,9 +454,9 @@ def repo_clone(
         result = vcs.clone(url, target_dir)
 
         if result.code == 0:
-            console.print("[green]✓ Repository cloned successfully[/green]")
+            console.print(f"[green]{_symbol(True)} Repository cloned successfully[/green]")
         else:
-            console.print(f"[red]✗ Failed to clone repository: {result.stderr}[/red]")
+            console.print(f"[red]{_symbol(False)} Failed to clone repository: {result.stderr}[/red]")
             raise typer.Exit(code=1)
 
     except ImportError:
@@ -472,7 +482,7 @@ def repo_status(
             console.print("[bold blue]Repository Status:[/bold blue]")
             console.print(result.stdout)
         else:
-            console.print(f"[red]✗ Failed to get status: {result.stderr}[/red]")
+            console.print(f"[red]{_symbol(False)} Failed to get status: {result.stderr}[/red]")
             raise typer.Exit(code=1)
 
     except ImportError:
@@ -549,10 +559,10 @@ def create_pr(
         result = vcs.pr_create(title, f"Auto-generated PR from artifacts in {from_dir}")
 
         if result.code == 0:
-            console.print("[green]✓ Pull request created successfully[/green]")
+            console.print(f"[green]{_symbol(True)} Pull request created successfully[/green]")
             console.print(result.stdout)
         else:
-            console.print(f"[red]✗ Failed to create PR: {result.stderr}[/red]")
+            console.print(f"[red]{_symbol(False)} Failed to create PR: {result.stderr}[/red]")
             raise typer.Exit(code=1)
 
     except ImportError:
