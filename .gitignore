@@ -128,3 +128,7 @@ combined_repo_plan.composed.json
 config/*.pem
 !config/*.pem.template
 
+
+# Coordination state artifacts
+state/
+

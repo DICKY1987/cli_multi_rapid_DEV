@@ -130,8 +130,10 @@ class Router:
         self.registry.register(SecurityScannerAdapter())
         self.registry.register(CertificateGeneratorAdapter())
 
-        # TODO: Register additional adapters:
-        # - verifier (quality gates)
+        # Register verifier adapter (quality gates)
+        from .adapters.verifier_adapter import VerifierAdapter
+
+        self.registry.register(VerifierAdapter())
 
         self.console.print(
             f"[dim]Initialized {len(self.registry.list_adapters())} adapters[/dim]"
